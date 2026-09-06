@@ -7,7 +7,7 @@ Ami recommends films, series, novels, and cultural anecdotes based on how you fe
 [![Watch the demo](https://img.shields.io/badge/YouTube-Watch%20the%20demo-red?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=VSvpd5PVpmU)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Deployed on Hugging face since May 18 2026 [![See the Hugging Face space](https://huggingface.co/spaces/aichakorovaev/ami-demo).
+Deployed on Hugging face since May 18 2026 [![See the Hugging Face space](https://img.shields.io/badge/-HuggingFace-3B4252?style=flat&logo=huggingface&logoColor=)(https://huggingface.co/spaces/aichakorovaev/ami-demo).
 
 ![Ami — Coraline recommendation screen](assets/screenshot.png)
 
