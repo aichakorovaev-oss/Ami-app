@@ -5,9 +5,7 @@
 Ami recommends films, series, novels, and cultural anecdotes based on how you feel *right now* and on peer-reviewed psychological research, not on your watch history nor on a popularity algorithm.
 
 [![Watch the demo](https://img.shields.io/badge/YouTube-Watch%20the%20demo-red?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=VSvpd5PVpmU)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-Deployed on Hugging face since May 18 2026 [![See the Hugging Face space](https://img.shields.io/badge/-HuggingFace-3B4252?style=flat&logo=huggingface&logoColor=)](https://huggingface.co/spaces/aichakorovaev/ami-demo/tree/main).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) Deployed on Hugging face since May 18 2026 [![See the Hugging Face space](https://img.shields.io/badge/-HuggingFace-3B4252?style=flat&logo=huggingface&logoColor=)](https://huggingface.co/spaces/aichakorovaev/ami-demo/tree/main).
 
 ![Ami — Coraline recommendation screen](assets/screenshot.png)
 
