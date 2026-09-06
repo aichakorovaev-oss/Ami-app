@@ -1,0 +1,4610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ami</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #38BDF8; }
+    #root { min-height: 100vh; }
+    #loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh; font-family: 'Fredoka', sans-serif;
+      color: white; font-size: 18px; letter-spacing: 0.05em;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&family=Quicksand:wght@300;400;500;600;700&family=Gochi+Hand&family=Lacquer&display=swap" rel="stylesheet">
+
+  <!-- Import map: ensures every "import 'react'" in any ESM module resolves
+       to the SAME URL. Without this, framer-motion bundles its own React copy
+       and calls useContext on a different React instance -> crash. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react":            "https://esm.sh/react@18.3.1",
+      "react/":           "https://esm.sh/react@18.3.1/",
+      "react-dom":        "https://esm.sh/react-dom@18.3.1",
+      "react-dom/":       "https://esm.sh/react-dom@18.3.1/",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="root"><div id="loading">Loading Ami...</div></div>
+
+  <!-- Babel standalone (sync, used inside the module below) -->
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+  <script type="module">
+    // All these imports go through the import map -> single React instance.
+    import * as React from "react";
+    import * as ReactDOMClient from "react-dom/client";
+    import * as Lucide   from "https://esm.sh/lucide-react@0.383.0?external=react";
+    import * as FM       from "https://esm.sh/framer-motion@11.18.2?external=react,react-dom";
+    import * as Recharts from "https://esm.sh/recharts@2.12.7?external=react,react-dom";
+    // react-pageflip wraps the StPageFlip library — same one used by
+    // the prototype. Marking react + react-dom external is essential so
+    // the bundle re-uses OUR React instance via the import map (avoids
+    // hooks-out-of-order crashes from a duplicate React).
+    import HTMLFlipBookDefault from "https://esm.sh/react-pageflip@2.0.3?external=react,react-dom";
+    const HTMLFlipBook = HTMLFlipBookDefault.default || HTMLFlipBookDefault;
+
+    const {
+      Sparkles, Quote, Star, Loader2, Video, Tv, Book,
+      Heart, Phone, X, ArrowUpRight, Sun, Moon,
+      Mic, MicOff, ImagePlus,
+      ChevronLeft, ChevronRight
+    } = Lucide;
+
+    const { motion, AnimatePresence } = FM;
+    const { AreaChart, Area, ResponsiveContainer } = Recharts;
+
+    const { useState, useEffect, useMemo } = React;
+
+    const jsxSource = `
+// ─────────────────────────────────────────────────────────────────
+// Theme — mirrors the prototype's index.css (Tailwind v4 @theme)
+// ─────────────────────────────────────────────────────────────────
+const THEME_CSS = \`
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&family=Quicksand:wght@300;400;500;600;700&family=Gochi+Hand&family=Lacquer&display=swap');
+
+:root {
+  --color-fun-pink: #E8B4AA;
+  --color-fun-mint: #A2FF00;
+  --color-fun-lilac: #E6E6FA;
+  --color-fun-yellow: #FFBF00;
+  --color-fun-blue: #38BDF8;
+  --color-fun-orange: #FFB347;
+  --color-fun-ink: #000000;
+  --color-fun-white: #FFFFFF;
+
+  --font-display: "Fredoka", sans-serif;
+  --font-body: "Quicksand", sans-serif;
+  --font-sketch: "Gochi Hand", cursive;
+  --font-weird: "Lacquer", cursive;
+
+  --shadow-stroke: white;
+  --shadow-color: rgba(75, 54, 33, 0.1);
+  --noise-radial-pink: rgba(232, 180, 170, 1);
+  --noise-radial-blue: rgba(56, 189, 248, 1);
+
+  --text-secondary: rgba(0, 0, 0, 0.7);
+  --text-muted: rgba(0, 0, 0, 0.4);
+  --text-faint: rgba(0, 0, 0, 0.2);
+  --border-soft: rgba(0, 0, 0, 0.05);
+  --border-subtle: rgba(0, 0, 0, 0.2);
+}
+
+/* DARK MODE — same trick as the prototype: redefine the vars,
+   everything that uses them auto-inverts. */
+.ami-root.ami-dark {
+  --color-fun-yellow: rgba(255, 191, 0, 0.3);
+  --color-fun-orange: rgba(251, 146, 60, 0.4);
+  --color-fun-ink: #cbd5e1;
+  --color-fun-white: #0f172a;
+
+  --shadow-stroke: #0f172a;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --noise-radial-pink: rgba(232, 180, 170, 0.5);
+  --noise-radial-blue: rgba(56, 189, 248, 0.5);
+
+  --text-secondary: rgba(203, 213, 225, 0.8);
+  --text-muted: rgba(203, 213, 225, 0.5);
+  --text-faint: rgba(203, 213, 225, 0.3);
+  --border-soft: rgba(203, 213, 225, 0.1);
+  --border-subtle: rgba(203, 213, 225, 0.3);
+}
+
+.ami-root {
+  font-family: var(--font-body);
+  color: var(--color-fun-ink);
+  background: var(--color-fun-blue);
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  overflow-x: hidden;
+  transition: background-color 0.8s ease, color 0.5s ease;
+}
+.ami-root.ami-dark {
+  background: var(--color-fun-white); /* now #0f172a */
+}
+.ami-root *::selection { background: var(--color-fun-pink); color: var(--color-fun-ink); }
+
+.font-display { font-family: var(--font-display); }
+.font-body    { font-family: var(--font-body); }
+.font-sketch  { font-family: var(--font-sketch); }
+.font-weird   { font-family: var(--font-weird); }
+
+.sticker-shadow {
+  box-shadow: 0 0 0 4px var(--shadow-stroke), 8px 8px 0 0 var(--shadow-color);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.sticker-shadow-hover:hover {
+  transform: scale(1.02) rotate(-1deg);
+  box-shadow: 0 0 0 6px var(--shadow-stroke), 12px 12px 0 0 var(--shadow-color);
+}
+.bubble-shadow {
+  box-shadow: 0 0 0 4px var(--shadow-stroke), 8px 8px 0 0 var(--shadow-color);
+}
+
+.storybook-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  -webkit-text-stroke: 1.5px var(--color-fun-ink);
+  color: white;
+}
+.ami-root.ami-dark .storybook-title {
+  -webkit-text-stroke: 1.5px white;
+  color: #0f172a;
+}
+
+/* Hero outline-only words in dark mode */
+.outline-white-on-dark > * { color: white; }
+.ami-root.ami-dark .outline-white-on-dark > * {
+  -webkit-text-stroke: 1.5px white !important;
+  color: transparent !important;
+}
+
+/* Mood-suggestion buttons: hover via CSS class to avoid the framer-motion
+   "interpolate between two CSS variables → black flash" bug. */
+.ami-mood-btn:hover {
+  background: var(--color-fun-yellow) !important;
+}
+
+/* Stack the details-modal grid on narrow screens */
+@media (max-width: 720px) {
+  .ami-modal-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ami-modal-grid > div:first-child {
+    position: static !important;
+    max-width: 16rem;
+    margin: 0 auto;
+  }
+}
+
+/* ── Dark mode : texte blanc dans les inputs ── */
+.ami-root.ami-dark textarea,
+.ami-root.ami-dark input[type="number"] {
+  color: white;
+}
+
+/* ── Dark mode : texte blanc dans "First reading" ── */
+.ami-root.ami-dark .vision-insight-understanding {
+  color: white !important;
+}
+
+/* ── Dark mode : tags noirs dans "First reading" (fond clair → texte noir lisible) ── */
+.ami-root.ami-dark .vision-insight-card .vision-tag {
+  color: black !important;
+}
+
+/* ── Dark mode : white text only in anecdote why block (white bg) ── */
+.ami-root.ami-dark .ami-why-anecdote p,
+.ami-root.ami-dark .ami-why-anecdote div {
+  color: white !important;
+}
+.ami-root.ami-dark .ami-why-anecdote .ami-why-label {
+  color: rgba(255,255,255,0.55) !important;
+}
+
+/* ── Mechanism tags: always black text (colored bg is always light) ── */
+.ami-mech-tag {
+  color: #000 !important;
+}
+
+.noise-overlay::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  opacity: 0.08; z-index: 50;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.04' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+.noise-overlay::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  opacity: 0.15; z-index: 49;
+  background-image:
+    radial-gradient(circle at 15% 15%, var(--noise-radial-pink) 0%, transparent 35%),
+    radial-gradient(circle at 85% 85%, var(--noise-radial-blue) 0%, transparent 35%),
+    radial-gradient(circle at 50% 10%, rgba(152, 251, 152, 0.1) 0%, transparent 30%);
+  filter: blur(80px);
+}
+
+/* ── react-pageflip (StPageFlip) — force opaque pages ───────────── */
+.stf__parent,
+.stf__wrapper {
+  background: transparent;
+}
+.stf__block {
+  background: var(--color-fun-white);
+}
+/* Each physical page surface — must be fully opaque so stacked pages
+   underneath never show through during or after a flip. */
+.ami-magazine-book .stf__item,
+.ami-flip-page,
+.ami-flip-page.page {
+  background: var(--color-fun-white) !important;
+  background-color: var(--color-fun-white) !important;
+}
+/* The page's inner content wrapper also gets a solid base, in case a
+   child layout leaves gaps (e.g. content shorter than the page). */
+.ami-flip-page > * {
+  background-color: var(--color-fun-white);
+  min-height: 100%;
+}
+/* Soft drop shadow under the whole book so it reads as a real object. */
+.ami-magazine-book {
+  background: transparent;
+}
+
+/* Re-enable text selection inside the book — react-pageflip sets
+   user-select: none on its wrappers to keep drag clean. We override
+   it on the page content. The corner-drag still works because the
+   library captures pointer events at the book level on the corners. */
+.ami-flip-page,
+.ami-flip-page * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+/* And we want the cursor to clearly tell the user the text is selectable. */
+.ami-flip-page-content,
+.ami-flip-page-content * {
+  cursor: text;
+}
+.ami-flip-page-content a,
+.ami-flip-page-content button,
+.ami-flip-page-content [role="button"] {
+  cursor: pointer;
+}
+\`;
+
+function cn(...args) { return args.filter(Boolean).join(" "); }
+
+// ─────────────────────────────────────────────────────────────────
+// FloatingWords
+// ─────────────────────────────────────────────────────────────────
+const FloatingWords = ({ text, style, className, intensity = 1, delayOffset = 0 }) => {
+  if (!text) return null;
+  return (
+    <span style={style} className={className}>
+      {String(text).split(" ").map((word, i) => (
+        <motion.span
+          key={i}
+          style={{ display: "inline-block", whiteSpace: "nowrap", marginRight: "0.3em", cursor: "default" }}
+          animate={{
+            y: [0, -4 * intensity, 2 * intensity, 0],
+            rotate: [0, 0.5 * intensity, -0.5 * intensity, 0],
+          }}
+          whileHover={{
+            y: -15 * intensity,
+            rotate: (Math.random() - 0.5) * 15,
+            zIndex: 10,
+            transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 },
+          }}
+          whileTap={{ rotate: (Math.random() - 0.5) * 30 }}
+          transition={{
+            duration: 10 + Math.random() * 5,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: i * 0.2 + delayOffset,
+          }}
+        >
+          {word}
+        </motion.span>
+      ))}
+    </span>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// MoodShape — animated organic blob
+// ─────────────────────────────────────────────────────────────────
+const MoodShape = ({ mood }) => {
+  const config = useMemo(() => {
+    const m = (mood || "").toLowerCase();
+    let color = "#3B82F6", secondaryColor = "#60A5FA", complexity = 3, duration = 8, scale = 1;
+    if (m.includes("sad") || m.includes("lonely") || m.includes("melancholic") || m.includes("grief")) {
+      color = "#2563EB"; secondaryColor = "#93C5FD"; complexity = 4; duration = 12;
+    } else if (m.includes("angry") || m.includes("cynical")) {
+      color = "#EF4444"; secondaryColor = "#FCA5A1"; complexity = 6; duration = 4; scale = 1.1;
+    } else if (m.includes("anxious") || m.includes("lost")) {
+      color = "#F472B6"; secondaryColor = "#FBCFE8"; complexity = 8; duration = 3; scale = 1.15;
+    } else if (m.includes("nostalgic") || m.includes("empty")) {
+      color = "#A78BFA"; secondaryColor = "#DDD6FE"; complexity = 5; duration = 10;
+    } else if (m.includes("peace") || m.includes("calm")) {
+      color = "#34D399"; secondaryColor = "#A7F3D0"; complexity = 2; duration = 15; scale = 0.9;
+    }
+    return { color, secondaryColor, complexity, duration, scale };
+  }, [mood]);
+
+  const generatePath = (seed) => {
+    const points = [];
+    const radius = 35, center = 50, numPoints = 8;
+    for (let i = 0; i < numPoints; i++) {
+      const angle = (i / numPoints) * Math.PI * 2;
+      const offset = Math.sin(angle * (config.complexity % 5 + 2) + seed) * (config.complexity * 1.2);
+      const dist = radius + offset;
+      points.push({ x: center + Math.cos(angle) * dist, y: center + Math.sin(angle) * dist });
+    }
+    let path = \`M \${points[0].x},\${points[0].y}\`;
+    for (let i = 0; i < points.length; i++) {
+      const next = points[(i + 1) % points.length];
+      const nextNext = points[(i + 2) % points.length];
+      path += \` Q \${next.x},\${next.y} \${(next.x + nextNext.x) / 2},\${(next.y + nextNext.y) / 2}\`;
+    }
+    return path + " Z";
+  };
+
+  const path1 = useMemo(() => generatePath(0), [config]);
+  const path2 = useMemo(() => generatePath(Math.PI), [config]);
+  const path3 = useMemo(() => generatePath(Math.PI / 2), [config]);
+
+  return (
+    <div style={{ position: "relative", width: "8rem", height: "8rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <motion.div
+        animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.4, 0.2] }}
+        transition={{ duration: config.duration, repeat: Infinity, ease: "easeInOut" }}
+        style={{ position: "absolute", inset: 0, filter: "blur(32px)", borderRadius: "9999px", backgroundColor: config.color }}
+      />
+      <motion.svg
+        viewBox="0 0 100 100"
+        style={{ width: "100%", height: "100%", position: "relative", zIndex: 10 }}
+        animate={{ scale: config.scale, rotate: [0, 360] }}
+        transition={{
+          rotate: { duration: config.duration * 4, repeat: Infinity, ease: "linear" },
+          scale: { duration: 0.5 },
+        }}
+      >
+        <defs>
+          <linearGradient id="moodGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={config.color} />
+            <stop offset="100%" stopColor={config.secondaryColor} />
+          </linearGradient>
+          <filter id="gooey">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+          </filter>
+        </defs>
+        <g filter="url(#gooey)">
+          <motion.path
+            d={path1} fill="url(#moodGradient)"
+            animate={{ d: [path1, path2, path3, path1], scale: [1, 1.02, 1] }}
+            transition={{
+              d: { duration: config.duration, repeat: Infinity, ease: "easeInOut" },
+              scale: { duration: 2, repeat: Infinity, ease: "easeInOut" },
+            }}
+          />
+          <motion.path
+            d={path2} fill={config.secondaryColor} opacity={0.3}
+            animate={{ d: [path2, path3, path1, path2] }}
+            transition={{ duration: config.duration * 1.5, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </g>
+        <motion.ellipse
+          cx="35" cy="35" rx="10" ry="5" fill="white" opacity="0.2"
+          animate={{ rotate: [0, 360] }}
+          transition={{ duration: config.duration * 4, repeat: Infinity, ease: "linear" }}
+        />
+      </motion.svg>
+      <motion.div
+        animate={{ scale: [1, 1.4, 1] }}
+        transition={{ duration: 2, repeat: Infinity }}
+        style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20, pointerEvents: "none" }}
+      >
+        <div style={{ width: "0.375rem", height: "0.375rem", background: "white", borderRadius: "9999px", boxShadow: "0 0 8px rgba(255,255,255,0.8)" }} />
+      </motion.div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Background — animated sun + clouds (or moon + stars in dark mode)
+// ─────────────────────────────────────────────────────────────────
+const Background = ({ active, dark }) => {
+  const clouds = [
+    { top: "8%",  side: "left",  startX: 20, endX: 180,  scale: 0.8,  duration: 35, hasEyes: true },
+    { top: "30%", side: "right", startX: 20, endX: -150, scale: 0.2,  duration: 45 },
+    { top: "70%", side: "left",  startX: 30, endX: 150,  scale: 0.6,  duration: 40 },
+    { top: "20%", side: "right", startX: 40, endX: -120, scale: 0.15, duration: 60 },
+    { top: "85%", side: "left",  startX: 10, endX: 160,  scale: 0.5,  duration: 50 },
+    { top: "50%", side: "right", startX: 50, endX: -220, scale: 0.9,  duration: 30 },
+    { top: "42%", side: "left",  startX: 0,  endX: 100,  scale: 0.3,  duration: 55 },
+  ];
+
+  // 20 stars — generated once so they don't jump around on re-render
+  const stars = useMemo(() => (
+    [...Array(20)].map((_, i) => ({
+      key: i,
+      top: \`\${Math.random() * 100}%\`,
+      left: \`\${Math.random() * 100}%\`,
+      size: Math.random() * 4 + 2,
+      duration: Math.random() * 3 + 2,
+      delay: Math.random() * 5,
+    }))
+  ), []);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 10 }}>
+
+      {/* Sun OR Moon */}
+      {active && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={
+            dark
+              ? { opacity: 1, scale: [1, 1.02, 1] }
+              : { opacity: 1, scale: [1, 1.05, 1], y: [0, -20, 0] }
+          }
+          transition={
+            dark
+              ? { opacity: { duration: 1 }, scale: { duration: 6, repeat: Infinity, ease: "easeInOut" } }
+              : {
+                  opacity: { duration: 1 },
+                  scale: { duration: 4, repeat: Infinity, ease: "easeInOut" },
+                  y: { duration: 6, repeat: Infinity, ease: "easeInOut" },
+                }
+          }
+          style={{
+            position: "absolute",
+            top: dark ? "12%" : "15%",
+            right: dark ? "18%" : "15%",
+            width: dark ? "16rem" : "18rem",
+            height: dark ? "16rem" : "18rem",
+            zIndex: 20, padding: "1rem",
+          }}
+        >
+          <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {dark ? (
+              <>
+                {/* Moon halos — lilac + blue, animated pulse */}
+                <motion.div
+                  animate={{ opacity: [0.4, 0.5, 0.4] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  style={{ position: "absolute", inset: 0, background: "var(--color-fun-lilac)", opacity: 0.4, filter: "blur(80px)", borderRadius: "9999px", transform: "scale(1.25)" }}
+                />
+                <motion.div
+                  animate={{ opacity: [0.3, 0.4, 0.3] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                  style={{ position: "absolute", inset: 0, background: "var(--color-fun-blue)", opacity: 0.3, filter: "blur(100px)", borderRadius: "9999px", transform: "scale(1.5)" }}
+                />
+
+                {/* Moon body */}
+                <div
+                  style={{
+                    width: "100%", height: "100%", borderRadius: "9999px",
+                    background: "#e2e8f0", /* slate-200 */
+                    position: "relative", zIndex: 10, overflow: "hidden",
+                    filter: "drop-shadow(0 0 30px rgba(230,230,250,0.6))",
+                  }}
+                >
+                  {/* Craters (blurred, like the prototype) */}
+                  <div style={{ position: "absolute", top: "20%", left: "30%", width: "2rem", height: "2rem", background: "#cbd5e1", borderRadius: "9999px", opacity: 0.6, filter: "blur(2px)" }} />
+                  <div style={{ position: "absolute", top: "60%", left: "20%", width: "3rem", height: "3rem", background: "#cbd5e1", borderRadius: "9999px", opacity: 0.5, filter: "blur(3px)" }} />
+                  <div style={{ position: "absolute", top: "40%", left: "70%", width: "2.5rem", height: "2.5rem", background: "#cbd5e1", borderRadius: "9999px", opacity: 0.4, filter: "blur(2px)" }} />
+                  <div style={{ position: "absolute", top: "75%", left: "65%", width: "1.5rem", height: "1.5rem", background: "#cbd5e1", borderRadius: "9999px", opacity: 0.55, filter: "blur(2px)" }} />
+
+                  {/* Subtle crescent highlight */}
+                  <div style={{ position: "absolute", inset: "-0.5rem", background: "linear-gradient(to top right, transparent, rgba(255,255,255,0.1), rgba(255,255,255,0.3))", borderRadius: "9999px" }} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ position: "absolute", inset: 0, background: "var(--color-fun-yellow)", opacity: 0.9, filter: "blur(90px)", borderRadius: "9999px", transform: "scale(1.25)" }} />
+                <div style={{ position: "absolute", inset: 0, background: "var(--color-fun-orange)", opacity: 0.5, filter: "blur(130px)", borderRadius: "9999px", transform: "scale(1.5)" }} />
+                <motion.div
+                  animate={{ rotate: 360, scale: [1, 1.1, 1] }}
+                  transition={{
+                    rotate: { duration: 60, repeat: Infinity, ease: "linear" },
+                    scale: { duration: 5, repeat: Infinity, ease: "easeInOut" },
+                  }}
+                  style={{ position: "absolute", inset: 0, zIndex: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  {[...Array(20)].map((_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        position: "absolute",
+                        height: "250%",
+                        width: "0.75rem",
+                        background: "linear-gradient(to top, transparent, rgba(255,191,0,0.4), transparent)",
+                        filter: "blur(2px)",
+                        transform: \`rotate(\${i * 18}deg)\`,
+                      }}
+                    />
+                  ))}
+                </motion.div>
+                <div
+                  style={{
+                    width: "100%", height: "100%", borderRadius: "9999px",
+                    background: "var(--color-fun-yellow)", position: "relative", zIndex: 10,
+                    filter: "drop-shadow(0 0 50px rgba(255,191,0,0.8))",
+                  }}
+                />
+              </>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Day mode → clouds. Night mode → twinkling stars. (XOR like the prototype) */}
+      {!dark ? (
+        clouds.map((c, index) => (
+        <motion.div
+          key={\`cloud-\${index}\`}
+          initial={{ x: c.startX, y: 0 }}
+          animate={{
+            x: [c.startX, c.endX, c.startX],
+            y: [0, 20, -20, 0],
+            scale: [1, 1.05, 0.95, 1],
+          }}
+          transition={{
+            x: { duration: c.duration, repeat: Infinity, ease: "easeInOut" },
+            y: { duration: c.duration * 0.7, repeat: Infinity, ease: "easeInOut" },
+            scale: { duration: c.duration * 0.5, repeat: Infinity, ease: "easeInOut" },
+          }}
+          style={{ position: "absolute", top: c.top, [c.side]: -150, zIndex: 5 }}
+        >
+          <div style={{ position: "relative", transform: \`scale(\${c.scale})\` }}>
+            <svg viewBox="0 0 100 60" style={{ width: "12rem", height: "8rem", overflow: "visible", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.1))" }}>
+              <path
+                d="M25,50 C15,50 5,42 5,30 C5,18 15,10 25,10 C27,10 29,11 31,12 C35,5 42,0 50,0 C60,0 68,8 70,18 C72,17 74,17 76,17 C85,17 92,24 92,33 C92,42 85,50 76,50 L25,50 Z"
+                fill="white"
+                stroke="black"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+              />
+              {c.hasEyes && (
+                <foreignObject x="25" y="15" width="50" height="30">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", transform: "scale(0.5)" }}>
+                    <div style={{ display: "flex", gap: "1rem" }}>
+                      {[0, 1].map((eye) => (
+                        <div key={eye} style={{ position: "relative", width: "1.5rem", height: "1.25rem" }}>
+                          <svg viewBox="0 0 40 20" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", color: "#000", fill: "none", stroke: "currentColor", strokeWidth: 2 }}>
+                            <motion.path
+                              d="M 5,15 Q 20,2 35,15"
+                              strokeLinecap="round"
+                              animate={{ d: ["M 5,15 Q 20,2 35,15", "M 5,15 Q 20,15 35,15", "M 5,15 Q 20,2 35,15"] }}
+                              transition={{ duration: 6, repeat: Infinity, delay: eye * 0.4, times: [0, 0.05, 0.1] }}
+                            />
+                          </svg>
+                          <motion.div
+                            animate={{ scaleY: [1, 0, 1], opacity: [1, 0, 1] }}
+                            transition={{ duration: 6, repeat: Infinity, delay: eye * 0.4, times: [0, 0.05, 0.1] }}
+                            style={{
+                              position: "absolute", top: "8px", left: "50%",
+                              width: "0.5rem", height: "0.5rem",
+                              background: "#000", borderRadius: "9999px",
+                              transform: "translateX(-50%)",
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </foreignObject>
+              )}
+            </svg>
+          </div>
+        </motion.div>
+        ))
+      ) : (
+        stars.map((s) => (
+          <motion.div
+            key={\`star-\${s.key}\`}
+            initial={{ opacity: 0.2, scale: 0.5 }}
+            animate={{
+              opacity: [0.2, 1, 0.2],
+              scale: [0.5, 1.2, 0.5],
+              rotate: [0, 45, 0],
+            }}
+            transition={{
+              duration: s.duration,
+              repeat: Infinity,
+              delay: s.delay,
+              ease: "easeInOut",
+            }}
+            style={{
+              position: "absolute", top: s.top, left: s.left,
+              color: "rgba(255, 191, 0, 0.8)",
+              filter: "drop-shadow(0 0 8px rgba(255,191,0,0.8))",
+            }}
+          >
+            <Star size={s.size} fill="currentColor" />
+          </motion.div>
+        ))
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// ResearchInput — clicking a mood appends to the free-text field.
+// User can always edit / refine the text manually.
+// ─────────────────────────────────────────────────────────────────
+function ResearchInput({ onAnalyze, isLoading }) {
+  const [freeText, setFreeText] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+
+  // ─── Multimodal state ───────────────────────────────────────────
+  const [imageB64, setImageB64]     = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError]   = useState(null);
+
+  // Drop mode: the text input morphs into a dropzone when active.
+  // Triggered by clicking the image icon. Accepts drag-drop, paste, click.
+  const [dropMode, setDropMode]       = useState(false);
+  const [isDragOver, setIsDragOver]   = useState(false);
+
+  const recognitionRef = React.useRef(null);
+  const baseTextRef    = React.useRef("");
+  const fileInputRef   = React.useRef(null);
+  const dropZoneRef    = React.useRef(null);
+
+  const appendMood = (m) => {
+    const lower = m.toLowerCase();
+    setFreeText((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) return lower;
+      const re = new RegExp(\`\\\\b\${lower}\\\\b\`, "i");
+      if (re.test(trimmed)) return prev;
+      const endsWithPunct = /[.,;!?]$/.test(trimmed);
+      const sep = endsWithPunct ? " " : " and ";
+      return trimmed + sep + lower;
+    });
+  };
+
+  // ─── Voice input via Web Speech API ─────────────────────────────
+  const SpeechRecognitionImpl =
+    (typeof window !== "undefined") &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  const toggleVoice = () => {
+    setVoiceError(null);
+    if (!SpeechRecognitionImpl) {
+      setVoiceError("Voice input needs Chrome, Edge, or Safari.");
+      return;
+    }
+    if (isListening) {
+      try { recognitionRef.current && recognitionRef.current.stop(); } catch (e) {}
+      setIsListening(false);
+      return;
+    }
+    const rec = new SpeechRecognitionImpl();
+    rec.lang = (typeof document !== "undefined" && document.documentElement.lang) || "en-US";
+    rec.interimResults = true;
+    rec.continuous     = true;
+
+    setFreeText((prev) => {
+      const base = prev || "";
+      baseTextRef.current = base;
+      return base;
+    });
+
+    rec.onresult = (event) => {
+      let fullTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      const live = fullTranscript.trim();
+      const base = baseTextRef.current;
+      const sep = base && live && !/\\s$/.test(base) ? " " : "";
+      setFreeText(base + sep + live);
+    };
+
+    rec.onerror = (e) => {
+      setVoiceError(\`Mic error: \${e.error || "unknown"}\`);
+      setIsListening(false);
+    };
+    rec.onend = () => setIsListening(false);
+
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+      setIsListening(true);
+    } catch (e) {
+      setVoiceError("Could not start mic.");
+    }
+  };
+
+  // ─── Image handling ─────────────────────────────────────────────
+  const handleImageFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setVoiceError("That doesn't look like an image.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setVoiceError("Image is too large (max 8 MB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImageB64(ev.target.result);
+      setImagePreview(ev.target.result);
+      setVoiceError(null);
+      setDropMode(false);
+      setIsDragOver(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onImageIconClick = () => {
+    if (imageB64) {
+      setImageB64(null);
+      setImagePreview(null);
+      setDropMode(false);
+      return;
+    }
+    if (dropMode) {
+      setDropMode(false);
+      return;
+    }
+    setDropMode(true);
+    setTimeout(() => { dropZoneRef.current && dropZoneRef.current.focus(); }, 50);
+  };
+
+  const onDropZoneClick = () => {
+    if (!dropMode) return;
+    fileInputRef.current && fileInputRef.current.click();
+  };
+
+  const onImageInputChange = (e) => {
+    const f = e.target.files && e.target.files[0];
+    handleImageFile(f);
+    e.target.value = "";
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    handleImageFile(f);
+  };
+
+  const onDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropMode) setIsDragOver(true);
+  };
+
+  const onDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const onPaste = (e) => {
+    if (!dropMode) return;
+    const items = (e.clipboardData || window.clipboardData)?.items || [];
+    for (const item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) handleImageFile(file);
+        return;
+      }
+    }
+  };
+
+  const onDropZoneKeyDown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setDropMode(false);
+      setIsDragOver(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!dropMode) return;
+    const handler = (e) => {
+      const items = (e.clipboardData || window.clipboardData)?.items || [];
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) handleImageFile(file);
+          return;
+        }
+      }
+    };
+    window.addEventListener("paste", handler);
+    return () => window.removeEventListener("paste", handler);
+  }, [dropMode]);
+
+  const clearImage = () => {
+    setImageB64(null);
+    setImagePreview(null);
+  };
+
+  const hasContent = !!freeText.trim() || !!imageB64;
+  const canSubmit  = !!birthYear.trim() && hasContent;
+
+  const handleSubmit = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!canSubmit || isLoading) return;
+    if (isListening) {
+      try { recognitionRef.current && recognitionRef.current.stop(); } catch (err) {}
+      setIsListening(false);
+    }
+    onAnalyze({
+      freeText:      freeText.trim(),
+      selectedMoods: [],
+      birthYear:     birthYear.trim(),
+      imageB64:      imageB64,
+    });
+  };
+
+  const suggestions = ["Lonely", "Anxious", "Empty", "Angry", "Confused", "Meaningless", "Discouraged", "Lost", "Sad", "Bored", "Exhausted", "Cynical"];
+  const voiceSupported = !!SpeechRecognitionImpl;
+
+  // ─── Visual: input vs. dropzone ─────────────────────────────────
+  const inputBoxStyle = {
+    width: "100%",
+    minWidth: 0,
+    background: dropMode
+      ? (isDragOver ? "var(--color-fun-mint)" : "var(--color-fun-pink)")
+      : "var(--color-fun-white)",
+    border: dropMode
+      ? "4px dashed var(--color-fun-ink)"
+      : "4px solid var(--color-fun-ink)",
+    padding: "2.5rem 9rem 2.5rem 3rem",
+    borderRadius: "3rem",
+    fontSize: "clamp(1.5rem, 4vw, 3rem)",
+    fontFamily: "var(--font-display)",
+    fontWeight: 900,
+    outline: "none",
+    boxShadow: "0 0 0 4px var(--shadow-stroke), 8px 8px 0 0 var(--shadow-color)",
+    transition: "background-color 0.25s ease, border-color 0.25s ease",
+    boxSizing: "border-box",
+    /* textarea-specific — auto-expand vertically */
+    resize: "none",
+    overflow: "hidden",
+    lineHeight: 1.3,
+    display: "block",
+  };
+
+  return (
+    <div style={{ width: "100%", transition: "all 0.5s", opacity: isLoading ? 0.5 : 1 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", position: "relative" }}>
+
+        {/* ─── Free-text input OR dropzone (same shell, swapped content) ─── */}
+        <div style={{ position: "relative" }}>
+          {!dropMode ? (
+            <>
+              {/* "How are you, right now?" — floating label, offset right */}
+              <motion.p
+                animate={{ y: [0, -5, 2, 0], rotate: [0, 0.4, -0.4, 0] }}
+                transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+                whileHover={{
+                  y: -12,
+                  rotate: (Math.random() - 0.5) * 10,
+                  transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 },
+                }}
+                whileTap={{ rotate: (Math.random() - 0.5) * 20, scale: 0.97 }}
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 900,
+                  fontSize: "clamp(1.25rem, 2.5vw, 1.875rem)",
+                  marginBottom: "0.75rem",
+                  marginLeft: "2rem",
+                  color: "var(--color-fun-ink)",
+                  cursor: "default",
+                  display: "inline-block",
+                }}
+              >
+                How are you, right now?
+              </motion.p>
+              {/* Auto-grow textarea — expands vertically as user types */}
+              <textarea
+                value={freeText}
+                onChange={(e) => {
+                  setFreeText(e.target.value);
+                  // Reset height then set to scrollHeight so it grows downward
+                  e.target.style.height = "auto";
+                  e.target.style.height = e.target.scrollHeight + "px";
+                }}
+                onKeyDown={(e) => {
+                  // Submit on Enter (without Shift), allow Shift+Enter for newline
+                  if (e.key === "Enter" && !e.shiftKey && canSubmit) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+                placeholder={isListening ? "Listening… speak freely" : "..."}
+                rows={1}
+                data-surface="white"
+                style={inputBoxStyle}
+              />
+            </>
+          ) : (
+            <motion.div
+              ref={dropZoneRef}
+              tabIndex={0}
+              role="button"
+              aria-label="Drop, paste, or click to add an image"
+              onClick={onDropZoneClick}
+              onDragEnter={onDragOver}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onPaste={onPaste}
+              onKeyDown={onDropZoneKeyDown}
+              initial={{ scale: 0.98, opacity: 0.6 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.25 }}
+              style={{
+                ...inputBoxStyle,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "1.25rem",
+                userSelect: "none",
+              }}
+            >
+              <motion.div
+                animate={{ y: isDragOver ? -6 : 0, rotate: isDragOver ? -4 : 0 }}
+                transition={{ duration: 0.2 }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <ImagePlus size={48} strokeWidth={3} />
+              </motion.div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", flex: 1 }}>
+                <div style={{ fontSize: "clamp(1.25rem, 2.8vw, 2rem)", lineHeight: 1.1 }}>
+                  {isDragOver ? "Drop it!" : "Drop a meme or photo"}
+                </div>
+                <div style={{
+                  fontSize: "clamp(0.85rem, 1.4vw, 1.05rem)",
+                  fontWeight: 600, opacity: 0.75, letterSpacing: "0.02em",
+                }}>
+                  {isDragOver
+                    ? "Release to attach"
+                    : "or paste with Cmd/Ctrl + V · or click to browse"}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Mic button */}
+          <motion.button
+            type="button"
+            onClick={toggleVoice}
+            disabled={isLoading || !voiceSupported || dropMode}
+            title={
+              dropMode ? "Cancel image first" :
+              voiceSupported ? (isListening ? "Stop listening" : "Speak instead") :
+              "Voice not supported in this browser"
+            }
+            whileTap={{ scale: 0.92 }}
+            animate={isListening ? { scale: [1, 1.12, 1] } : { scale: 1 }}
+            transition={isListening
+              ? { duration: 1, repeat: Infinity, ease: "easeInOut" }
+              : { duration: 0.2 }}
+            style={{
+              position: "absolute", right: "5.25rem", top: "50%", transform: "translateY(-50%)",
+              width: "3.5rem", height: "3.5rem", borderRadius: "9999px",
+              background: isListening ? "var(--color-fun-pink)" : "var(--color-fun-mint)",
+              border: "3px solid var(--color-fun-ink)", color: "var(--color-fun-ink)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: (voiceSupported && !dropMode) ? "pointer" : "not-allowed",
+              opacity: (voiceSupported && !dropMode) ? 1 : 0.3,
+              boxShadow: "0 0 0 3px var(--shadow-stroke), 4px 4px 0 0 var(--shadow-color)",
+              zIndex: 2,
+            }}
+          >
+            {isListening ? <MicOff size={24} strokeWidth={3} /> : <Mic size={24} strokeWidth={3} />}
+          </motion.button>
+
+          {/* Image icon: opens dropzone OR closes/clears it */}
+          <motion.button
+            type="button"
+            onClick={onImageIconClick}
+            disabled={isLoading}
+            title={
+              imageB64 ? "Remove image" :
+              dropMode ? "Cancel" :
+              "Drop, paste, or browse an image"
+            }
+            whileHover={{ rotate: dropMode ? 0 : 6 }}
+            whileTap={{ scale: 0.92 }}
+            animate={dropMode ? { rotate: 90 } : { rotate: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{
+              position: "absolute", right: "1.25rem", top: "50%", transform: "translateY(-50%)",
+              width: "3.5rem", height: "3.5rem", borderRadius: "9999px",
+              background: imageB64
+                ? "var(--color-fun-pink)"
+                : (dropMode ? "var(--color-fun-pink)" : "var(--color-fun-yellow, #FFE066)"),
+              border: "3px solid var(--color-fun-ink)", color: "var(--color-fun-ink)",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              boxShadow: "0 0 0 3px var(--shadow-stroke), 4px 4px 0 0 var(--shadow-color)",
+              zIndex: 2,
+            }}
+          >
+            {(imageB64 || dropMode)
+              ? <X size={24} strokeWidth={3} />
+              : <ImagePlus size={24} strokeWidth={3} />}
+          </motion.button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={onImageInputChange}
+            style={{ display: "none" }}
+          />
+        </div>
+
+        {/* ─── Image preview ─── */}
+        {imagePreview && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{
+              display: "flex", alignItems: "center", gap: "1rem",
+              padding: "1rem 1.25rem", borderRadius: "1.5rem",
+              background: "var(--color-fun-white)",
+              border: "3px solid var(--color-fun-ink)",
+              boxShadow: "0 0 0 3px var(--shadow-stroke), 4px 4px 0 0 var(--shadow-color)",
+            }}
+          >
+            <img
+              src={imagePreview}
+              alt="Uploaded"
+              style={{
+                width: "5rem", height: "5rem", objectFit: "cover",
+                borderRadius: "1rem", border: "3px solid var(--color-fun-ink)",
+              }}
+            />
+            <div style={{ flex: 1, fontFamily: "var(--font-display)", fontWeight: 700 }}>
+              <div style={{ fontSize: "1.1rem" }}>Image attached</div>
+              <div style={{ fontSize: "0.9rem", opacity: 0.7 }}>
+                Ami will read its emotional subtext alongside your words.
+              </div>
+            </div>
+            <motion.button
+              type="button"
+              onClick={clearImage}
+              whileHover={{ rotate: 90 }}
+              style={{
+                width: "2.5rem", height: "2.5rem", borderRadius: "9999px",
+                background: "var(--color-fun-pink)", border: "3px solid var(--color-fun-ink)",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+              title="Remove image"
+            >
+              <X size={18} strokeWidth={3} />
+            </motion.button>
+          </motion.div>
+        )}
+
+        {voiceError && (
+          <div style={{
+            padding: "0.75rem 1rem", borderRadius: "1rem",
+            background: "var(--color-fun-pink)", border: "2px solid var(--color-fun-ink)",
+            fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.95rem",
+          }}>
+            {voiceError}
+          </div>
+        )}
+
+        {/* ─── Birth year + submit ─── */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+            <input
+              type="number"
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) handleSubmit(e); }}
+              placeholder="Your birth year (e.g. 1995)"
+              min="1940" max="2020"
+              data-surface="white"
+              style={{
+                width: "100%", background: "var(--color-fun-white)",
+                border: "4px solid var(--color-fun-ink)", padding: "1.5rem 2.5rem",
+                borderRadius: "2rem", fontSize: "clamp(1.25rem, 2.5vw, 1.875rem)",
+                fontFamily: "var(--font-display)", fontWeight: 700,
+                outline: "none", boxShadow: "0 0 0 4px var(--shadow-stroke), 8px 8px 0 0 var(--shadow-color)",
+              }}
+            />
+          </div>
+
+          <motion.button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isLoading || !canSubmit}
+            animate={!isLoading && canSubmit ? { y: [0, -8, 0], scale: [1, 1.05, 1] } : {}}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            whileHover={{ rotate: 6 }}
+            style={{
+              background: "var(--color-fun-mint)", color: "black",
+              padding: "1.5rem 3rem", border: "4px solid black", borderRadius: "9999px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: "1rem", cursor: "pointer",
+              opacity: (!isLoading && !canSubmit) ? 0.3 : 1,
+              boxShadow: "0 0 0 4px var(--shadow-stroke), 8px 8px 0 0 var(--shadow-color)",
+              fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "1.5rem",
+            }}
+          >
+            <span>{isLoading ? "AMI IS THINKING..." : "FIND MY WELL-BEING"}</span>
+            {isLoading ? (
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+                <Loader2 size={36} />
+              </motion.div>
+            ) : (
+              <Sparkles size={36} strokeWidth={3} />
+            )}
+          </motion.button>
+        </div>
+
+        {/* ─── Mood suggestion chips ─── */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "center", marginTop: "0.5rem" }}>
+          {suggestions.map((suggestion, si) => (
+            <motion.button
+              key={suggestion}
+              type="button"
+              onClick={() => appendMood(suggestion)}
+              animate={{ y: [0, -6 - (si % 3) * 2, 0], rotate: [0, (si % 2 === 0 ? 1 : -1), 0] }}
+              transition={{ duration: 5 + si * 0.4, repeat: Infinity, ease: "easeInOut", delay: si * 0.15 }}
+              whileHover={{
+                y: -14,
+                rotate: (Math.random() - 0.5) * 14,
+                scale: 1.1,
+                zIndex: 10,
+                transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 },
+              }}
+              whileTap={{ scale: 0.93, rotate: (Math.random() - 0.5) * 25 }}
+              style={{
+                background: "var(--color-fun-white)", color: "var(--color-fun-ink)",
+                padding: "0.75rem 1.5rem", border: "3px solid var(--color-fun-ink)",
+                borderRadius: "9999px", fontFamily: "var(--font-display)", fontWeight: 700,
+                fontSize: "1.5rem", cursor: "pointer",
+                boxShadow: "0 0 0 4px var(--shadow-stroke), 8px 8px 0 0 var(--shadow-color)",
+                transition: "background-color 0.2s ease",
+              }}
+            >
+              <FloatingWords text={suggestion} intensity={0.5} />
+            </motion.button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RecommendationCard
+// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// AnecdoteOrDescription — splits the anecdote into body + question card
+// ─────────────────────────────────────────────────────────────────
+function splitAnecdote(text) {
+  if (!text) return { body: "", question: "" };
+  // The engaging question is always the last sentence ending with ?
+  const lastQ = text.lastIndexOf("?");
+  if (lastQ === -1 || lastQ < text.length * 0.4) return { body: text, question: "" };
+  // Walk back from the ? to find the sentence start
+  const before = text.slice(0, lastQ);
+  const lastStop = Math.max(
+    before.lastIndexOf(". "),
+    before.lastIndexOf("! "),
+    before.lastIndexOf("\\n")
+  );
+  const questionStart = lastStop === -1 ? 0 : lastStop + 2;
+  const body = text.slice(0, questionStart).trim();
+  const question = text.slice(questionStart, lastQ + 1).trim();
+  return { body: body || text, question };
+}
+
+function AnecdoteOrDescription({ recommendation }) {
+  if (recommendation.type !== "anecdote") {
+    return (
+      <p data-secondary-text style={{
+        fontSize: "1.5rem",
+        fontFamily: "var(--font-body)",
+        fontWeight: 500,
+        color: "var(--text-secondary)",
+        marginBottom: "3rem",
+        lineHeight: 1.6,
+        fontStyle: "italic",
+      }}>
+        <FloatingWords text={recommendation.description} intensity={0.4} />
+      </p>
+    );
+  }
+  const { body, question } = splitAnecdote(recommendation.description);
+  return (
+    <>
+      <p data-secondary-text style={{
+        fontSize: "1.4rem",
+        fontFamily: "var(--font-body)",
+        fontWeight: 500,
+        color: "var(--text-secondary)",
+        marginBottom: question ? "1.5rem" : "3rem",
+        lineHeight: 1.6,
+        fontStyle: "italic",
+      }}>
+        <FloatingWords text={body} intensity={0.4} />
+      </p>
+      {question && (
+        <motion.div
+          animate={{ y: [0, -5, 0], rotate: [0, 0.5, -0.5, 0] }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            background: "var(--color-fun-pink)",
+            border: "4px solid var(--color-fun-ink)",
+            borderRadius: "2rem",
+            padding: "1.5rem 2rem",
+            marginBottom: "2rem",
+            transform: "rotate(-1deg)",
+            boxShadow: "0 0 0 4px var(--shadow-stroke), 6px 6px 0 0 var(--shadow-color)",
+          }}
+        >
+          <span style={{
+            fontFamily: "var(--font-sketch)",
+            fontSize: "0.75rem",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            color: "rgba(0,0,0,0.5)",
+            display: "block",
+            marginBottom: "0.5rem",
+          }}>And you?</span>
+          <p style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 900,
+            fontSize: "clamp(1.25rem, 2.5vw, 1.75rem)",
+            color: "var(--color-fun-ink)",
+            lineHeight: 1.25,
+            margin: 0,
+          }}>
+            <FloatingWords text={question} intensity={0.7} />
+          </p>
+        </motion.div>
+      )}
+    </>
+  );
+}
+
+function RecommendationCard({ recommendation, index, typeIndex = 0, onOpenDetails }) {
+  const bgColor = index % 3 === 0 ? "var(--color-fun-blue)"
+    : index % 3 === 1 ? "var(--color-fun-yellow)"
+    : "var(--color-fun-mint)";
+  const Icon = recommendation.type === "film" ? Video
+    : recommendation.type === "series" ? Tv
+    : Book;
+
+  const url = externalUrlFor(recommendation);
+  const details = recommendation.details || null;
+
+  const detailEntries = useMemo(() => {
+    if (!details) return [];
+    const out = [];
+    const fmt = (k) => k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+    Object.entries(details).forEach(([k, v]) => {
+      if (v == null || v === "") return;
+      const value = Array.isArray(v) ? v.join(", ") : String(v);
+      out.push([fmt(k), value]);
+    });
+    if (recommendation.creator && recommendation.creator !== "Memory") {
+      out.unshift([recommendation.type === "novel" ? "Author" : recommendation.type === "film" ? "Director" : recommendation.type === "series" ? "Creator" : "By", recommendation.creator]);
+    }
+    if (recommendation.year && recommendation.year !== "Memory") {
+      out.unshift(["Year", recommendation.year]);
+    }
+    return out;
+  }, [details, recommendation]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true }}
+      transition={{ type: "spring", stiffness: 100, damping: 12 }}
+      style={{ width: "100%" }}
+    >
+      <motion.div
+        animate={{ y: [0, -10, 0] }}
+        transition={{ duration: 7 + index, repeat: Infinity, ease: "easeInOut" }}
+        className="sticker-shadow sticker-shadow-hover"
+        data-surface="white"
+        style={{
+          position: "relative", padding: "3rem", borderRadius: "3.5rem",
+          border: "4px solid var(--color-fun-ink)",
+          transition: "all 0.3s",
+          background: "var(--color-fun-white)",
+        }}
+      >
+        <div style={{ position: "absolute", top: "1rem", right: "1rem", width: "3rem", height: "3rem", borderTop: "4px solid var(--border-subtle)", borderRight: "4px solid var(--border-subtle)", borderTopRightRadius: "1.5rem" }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "2rem" }}>
+          <motion.div
+            animate={{ y: [0, -6, 0], rotate: [3, -3, 3] }}
+            transition={{ duration: 3 + index % 2, repeat: Infinity, ease: "easeInOut" }}
+            whileHover={{ scale: 1.2, rotate: -10, y: -10 }}
+            whileTap={{ scale: 0.9 }}
+            style={{
+              width: "3.5rem", height: "3.5rem", borderRadius: "9999px",
+              border: "4px solid var(--color-fun-ink)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: bgColor,
+            }}
+          >
+            <span style={{ color: "var(--color-fun-ink)" }}><Icon size={32} /></span>
+          </motion.div>
+          <span style={{ fontFamily: "var(--font-sketch)", fontSize: "1.875rem", color: "var(--text-secondary)" }}>
+            <FloatingWords
+              text={typeLabel(recommendation.type, typeIndex)}
+              intensity={0.6}
+            />
+          </span>
+        </div>
+
+        {recommendation.intro && (
+          <motion.p
+            initial={{ opacity: 0, y: -6 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.15 + index * 0.05, duration: 0.5 }}
+            style={{
+              fontFamily: "var(--font-sketch)",
+              fontSize: "clamp(1.1rem, 1.6vw, 1.5rem)",
+              fontStyle: "italic",
+              color: "var(--text-secondary)",
+              marginBottom: "1rem",
+              lineHeight: 1.4,
+              maxWidth: "90%",
+            }}
+          >
+            {recommendation.intro}
+          </motion.p>
+        )}
+
+        <h3
+          className="storybook-title"
+          style={{
+            fontSize: "clamp(2rem, 5vw, 4.5rem)",
+            lineHeight: 1.1,
+            color: "white",
+            marginBottom: "2rem",
+            filter: "drop-shadow(0 10px 8px rgba(0,0,0,0.04)) drop-shadow(0 4px 3px rgba(0,0,0,0.1))",
+          }}
+        >
+          <FloatingWords text={recommendation.title} />
+        </h3>
+
+        {recommendation.poster && (
+          <motion.div
+            whileHover={{
+              scale: 1.04,
+              rotate: 0.8,
+              y: -6,
+              transition: { type: "spring", stiffness: 300, damping: 18 },
+            }}
+            whileTap={{ scale: 0.96, rotate: -1.2 }}
+            style={{
+              width: "100%",
+              marginBottom: "2rem",
+              borderRadius: "1.5rem",
+              overflow: "hidden",
+              border: "3px solid var(--color-fun-ink)",
+              boxShadow: "0 0 0 3px var(--shadow-stroke), 6px 6px 0 0 var(--shadow-color)",
+              transform: "rotate(-0.6deg)",
+              background: "var(--color-fun-white)",
+              cursor: "pointer",
+            }}
+          >
+            <img
+              src={upgradePosterQuality(recommendation.poster)}
+              alt={recommendation.title}
+              loading="lazy"
+              style={{
+                display: "block",
+                width: "100%",
+                height: "auto",
+                maxHeight: "320px",
+                objectFit: "cover",
+                objectPosition: "top center",
+              }}
+              onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
+            />
+          </motion.div>
+        )}
+
+        <AnecdoteOrDescription recommendation={recommendation} />
+
+        <div className="ami-why-block" style={{
+          background: "var(--color-fun-yellow)",
+          padding: "2.5rem",
+          border: "4px solid var(--color-fun-ink)",
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: "2.5rem",
+          boxShadow: "inset 0 2px 4px rgba(0,0,0,0.06)",
+          transform: "rotate(1deg)",
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <p style={{
+              fontFamily: "var(--font-sketch)",
+              fontSize: "1.5rem",
+              color: "var(--text-muted)",
+              textDecoration: "underline",
+              margin: 0,
+            }}>
+              <FloatingWords text="A little secret..." intensity={0.5} />
+            </p>
+            {recommendation.mechanism && <MechanismPill mechanismId={recommendation.mechanism} color={undefined} />}
+          </div>
+          <p style={{
+            fontSize: "1.5rem",
+            fontFamily: "var(--font-body)",
+            fontWeight: 600,
+            color: "var(--color-fun-ink)",
+            lineHeight: 1.3,
+          }}>
+            <FloatingWords text={recommendation.artisticConnection} intensity={0.5} />
+          </p>
+          {recommendation.paper && (
+            <p style={{
+              marginTop: "1rem",
+              fontSize: "0.85rem",
+              fontFamily: "var(--font-body)",
+              fontStyle: "italic",
+              color: "rgba(0,0,0,0.55)",
+              lineHeight: 1.45,
+              borderTop: "1.5px dashed rgba(0,0,0,0.18)",
+              paddingTop: "0.75rem",
+            }}>
+              {recommendation.paper}
+            </p>
+          )}
+        </div>
+
+        {(url || detailEntries.length > 0) && (
+          <div style={{ display: "flex", gap: "1rem", marginTop: "3rem" }}>
+            {url && (
+              <motion.a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                whileHover={{ y: -4 }}
+                whileTap={{ y: 0, scale: 0.98 }}
+                className="sticker-shadow"
+                style={{
+                  flex: 1,
+                  padding: "1.25rem 2rem",
+                  background: "var(--color-fun-orange)",
+                  color: "white",
+                  border: "4px solid var(--color-fun-ink)",
+                  borderRadius: "1.5rem",
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 900,
+                  fontSize: "1.5rem",
+                  textAlign: "center",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  transition: "transform 0.2s",
+                }}
+              >
+                <FloatingWords text="LET'S GO!" />
+              </motion.a>
+            )}
+            {detailEntries.length > 0 && (
+              <motion.button
+                onClick={() => onOpenDetails && onOpenDetails({ recommendation, detailEntries, typeIndex })}
+                whileHover={{ rotate: 10 }}
+                whileTap={{ scale: 0.95 }}
+                aria-label="Show details"
+                className="sticker-shadow"
+                style={{
+                  padding: "1.25rem",
+                  background: "var(--color-fun-white)",
+                  color: "var(--color-fun-ink)",
+                  border: "4px solid var(--color-fun-ink)",
+                  borderRadius: "1.5rem",
+                  cursor: "pointer",
+                  transition: "transform 0.2s",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <ArrowUpRight size={36} strokeWidth={4} />
+              </motion.button>
+            )}
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MagazineView
+// ─────────────────────────────────────────────────────────────────
+const FlipPage = React.forwardRef(function FlipPage(props, ref) {
+  const isLeftPage = (props.number % 2) === 0;
+  const stop = (e) => { e.stopPropagation(); };
+
+  return (
+    <div
+      ref={ref}
+      className="ami-flip-page page"
+      style={{
+        width: props.pageW,
+        height: props.pageH,
+        background: "var(--color-fun-white)",
+        overflow: "hidden",
+        position: "relative",
+      }}
+      data-density="soft"
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0, bottom: 0,
+          [isLeftPage ? "right" : "left"]: 0,
+          width: "9%",
+          maxWidth: "60px",
+          pointerEvents: "none",
+          zIndex: 2,
+          background: isLeftPage
+            ? "linear-gradient(to right, rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 55%, rgba(0,0,0,0.28) 100%)"
+            : "linear-gradient(to left,  rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 55%, rgba(0,0,0,0.28) 100%)",
+        }}
+      />
+      <div
+        className="ami-flip-page-content"
+        onPointerDownCapture={stop}
+        onMouseDownCapture={stop}
+        onTouchStartCapture={stop}
+        style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0, bottom: 0,
+          padding: 0,
+          zIndex: 1,
+        }}
+      >
+        {props.children}
+      </div>
+    </div>
+  );
+});
+
+function MagazineView({ result, currentMood, onSurpriseMe, onReturn, loading }) {
+  const recs = result.recommendations || [];
+  const totalSpreads = 1 + recs.length;
+  const totalPages = totalSpreads * 2;
+
+  const [spread, setSpread] = useState(0);
+  const [detailsOpenFor, setDetailsOpenFor] = useState(null);
+  const bookRef = React.useRef(null);
+
+  const THEMES = [
+    { hex: "#38BDF8", soft: "rgba(56,189,248,0.18)" },
+    { hex: "#E8B4AA", soft: "rgba(232,180,170,0.22)" },
+    { hex: "#FFBF00", soft: "rgba(255,191,0,0.20)" },
+    { hex: "#FFB347", soft: "rgba(255,179,71,0.22)" },
+  ];
+  const accent = THEMES[spread % THEMES.length];
+
+  const typeIndexes = useMemo(() => {
+    const counters = {};
+    return recs.map((r) => {
+      const t = r.type || "discovery";
+      counters[t] = (counters[t] || 0) + 1;
+      return counters[t] - 1;
+    });
+  }, [recs]);
+
+  const measure = () => {
+    const margin = 32;
+    const reserved = 140;
+    const ASPECT = 17 / 11;
+    const availW = Math.max(320, window.innerWidth  - margin * 2);
+    const availH = Math.max(280, window.innerHeight - reserved - margin);
+    let w = availW, h = w / ASPECT;
+    if (h > availH) { h = availH; w = h * ASPECT; }
+    w = Math.floor(w); h = Math.floor(h);
+    return { w, h, pw: Math.floor(w / 2), ph: h };
+  };
+  const [bookSize, setBookSize] = useState(() =>
+    (typeof window !== "undefined" ? measure() : { w: 900, h: 580, pw: 450, ph: 580 })
+  );
+  useEffect(() => {
+    const recalc = () => setBookSize(measure());
+    recalc();
+    window.addEventListener("resize", recalc);
+    return () => window.removeEventListener("resize", recalc);
+  }, []);
+
+  const flipBookAvailable =
+    typeof HTMLFlipBook === "function" ||
+    (HTMLFlipBook && typeof HTMLFlipBook === "object");
+
+  const [mountTick, setMountTick] = useState(0);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMountTick(1));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const renderOvertureLeft = (theme) => (
+    <div style={{
+      height: "100%",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(135deg, var(--color-fun-white) 0%, var(--color-fun-white) 60%, " + theme.soft + " 100%)",
+    }}>
+      <motion.div
+        initial={{ scale: 0.7, opacity: 0 }}
+        animate={{ scale: 1.2, opacity: 1 }}
+        transition={{ duration: 0.9, delay: 0.1 }}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+      >
+        <MoodShape mood={currentMood} />
+      </motion.div>
+    </div>
+  );
+
+  const renderOvertureRight = (theme) => (
+    <div style={{
+      height: "100%",
+      background: "var(--color-fun-white)",
+      display: "grid", gridTemplateRows: "auto 1fr auto",
+      padding: "7% 8% 5%", gap: "1.75rem",
+      position: "relative",
+    }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        paddingBottom: "0.85rem",
+        borderBottom: "1px solid var(--border-soft)",
+      }}>
+        <span style={{
+          fontFamily: "var(--font-display)", fontWeight: 900,
+          fontSize: "clamp(1.1rem, 1.7vw, 1.7rem)",
+          letterSpacing: "-0.04em", color: "var(--color-fun-ink)",
+        }}>AMI.</span>
+        <span style={{
+          fontFamily: "var(--font-body)", fontSize: "0.6rem",
+          letterSpacing: "0.3em", textTransform: "uppercase",
+          color: "var(--text-faint)", fontWeight: 700,
+        }}>Issue One</span>
+      </div>
+      <div style={{
+        position: "relative", paddingLeft: "2.25rem",
+        display: "flex", alignItems: "center", minHeight: 0,
+      }}>
+        <Quote size={44} style={{
+          position: "absolute", left: "-0.3rem", top: "-0.2rem",
+          color: theme.hex, opacity: 0.4,
+        }} />
+        <p style={{
+          fontFamily: "var(--font-display)", fontWeight: 900, fontStyle: "italic",
+          fontSize: "clamp(1.15rem, 1.75vw, 1.9rem)",
+          lineHeight: 1.3, letterSpacing: "-0.015em",
+          color: "var(--color-fun-ink)", margin: 0,
+        }}>{result.thesis}</p>
+      </div>
+      <div style={{
+        display: "flex", justifyContent: "flex-end", alignItems: "flex-end",
+        paddingTop: "0.5rem", borderTop: "1px solid var(--border-soft)",
+      }}>
+        <span style={{
+          fontFamily: "var(--font-display)", fontWeight: 900,
+          fontSize: "1.6rem", letterSpacing: "-0.04em",
+          lineHeight: 1, color: "var(--text-faint)",
+        }}>02</span>
+      </div>
+    </div>
+  );
+
+  const renderRecLeft = (rec, recIdx, theme) => {
+    const iconFor = (t) =>
+      t === "film"     ? Video :
+      t === "series"   ? Tv    :
+      t === "novel"    ? Book  :
+      t === "anecdote" ? Heart :
+      Sparkles;
+    const Icon = iconFor(rec.type);
+    const label = typeLabel(rec.type, typeIndexes[recIdx]);
+    const detailsOpen = detailsOpenFor === recIdx;
+
+    return (
+      <div style={{
+        height: "100%",
+        background: "var(--color-fun-white)",
+        display: "grid", gridTemplateRows: "auto 1fr auto",
+        padding: "6% 7% 4%", gap: "1rem",
+        position: "relative",
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.5rem",
+          color: theme.hex, fontFamily: "var(--font-body)",
+          fontSize: "0.65rem", fontWeight: 800,
+          letterSpacing: "0.35em", textTransform: "uppercase",
+        }}>
+          <Icon size={14} /> {label}
+        </div>
+        <div style={{
+          minHeight: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          position: "relative",
+        }}>
+          <div style={{
+            position: "absolute", top: "-1%", left: "50%",
+            transform: "translateX(-50%) rotate(3deg)",
+            width: "18%", height: "1.6rem",
+            background: theme.soft, border: "1px solid " + theme.hex,
+            borderRadius: "0.15rem",
+            zIndex: 3, opacity: 0.9,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+          }} />
+          {rec.poster ? (
+            <motion.div
+              animate={{ rotate: [-0.5, 0.5, -0.5] }}
+              transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                height: "100%", maxHeight: "100%",
+                aspectRatio: "2 / 3", maxWidth: "85%",
+                border: "10px solid var(--color-fun-white)",
+                background: "var(--color-fun-white)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.22), 0 0 0 1px var(--border-soft)",
+                overflow: "hidden", position: "relative",
+              }}
+            >
+              <img
+                src={upgradePosterQuality(rec.poster)} alt={rec.title}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            </motion.div>
+          ) : (
+            <div style={{
+              height: "100%", aspectRatio: "2 / 3", maxWidth: "85%",
+              border: "3px solid var(--color-fun-ink)",
+              background: theme.soft,
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              padding: "1.5rem", textAlign: "center",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.16)",
+            }}>
+              <Icon size={56} style={{ color: theme.hex, marginBottom: "1rem" }} />
+              <div style={{
+                fontFamily: "var(--font-sketch)",
+                fontSize: "clamp(1rem, 1.6vw, 1.5rem)",
+                color: "var(--color-fun-ink)", lineHeight: 1.15,
+              }}>{rec.title}</div>
+            </div>
+          )}
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setDetailsOpenFor(detailsOpen ? null : recIdx); }}
+            aria-label={detailsOpen ? "Hide details" : "Show the small print"}
+            style={{
+              position: "absolute", top: "1rem", right: "1rem",
+              width: "2.25rem", height: "2.25rem", borderRadius: "9999px",
+              background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+              border: "none", cursor: "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
+              transition: "transform 0.2s", zIndex: 6,
+              transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
+            }}
+          ><ChevronRight size={16} /></button>
+          <AnimatePresence>
+            {detailsOpen && (
+              <motion.div
+                initial={{ opacity: 0, x: 12, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 12, scale: 0.95 }}
+                transition={{ duration: 0.18 }}
+                style={{
+                  position: "absolute", top: "3.25rem", right: "0.75rem",
+                  width: "min(60%, 14rem)", maxHeight: "80%",
+                  overflowY: "auto",
+                  background: "var(--color-fun-white)",
+                  border: "1px solid var(--border-subtle)",
+                  borderRadius: "0.75rem",
+                  padding: "0.9rem 1.05rem",
+                  fontSize: "0.72rem",
+                  fontFamily: "var(--font-body)",
+                  color: "var(--color-fun-ink)",
+                  boxShadow: "0 12px 30px rgba(0,0,0,0.15)",
+                  zIndex: 7,
+                }}
+              >
+                <div style={{
+                  fontStyle: "italic", color: "var(--text-faint)",
+                  borderBottom: "1px solid var(--border-soft)",
+                  paddingBottom: "0.4rem", marginBottom: "0.5rem",
+                  fontSize: "0.62rem",
+                }}>…the small print</div>
+                {rec.year && rec.year !== "Memory" && <Row k="Year" v={rec.year} accent={theme.hex} />}
+                {rec.creator && rec.creator !== "Memory" && <Row k="By" v={rec.creator} accent={theme.hex} />}
+                {rec.details && Object.entries(rec.details).map(([k, v]) => {
+                  if (v == null || v === "") return null;
+                  const lab = k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+                  const val = Array.isArray(v) ? v.join(", ") : String(v);
+                  return <Row key={k} k={lab} v={val} accent={theme.hex} />;
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+        }}>
+          <span style={{
+            fontFamily: "var(--font-body)", fontSize: "0.6rem",
+            letterSpacing: "0.3em", textTransform: "uppercase",
+            color: "var(--text-faint)", fontWeight: 700,
+          }}>{rec.creator && rec.creator !== "Memory" ? rec.creator : "Ami"}</span>
+          <span style={{
+            fontFamily: "var(--font-display)", fontWeight: 900,
+            fontSize: "1.6rem", letterSpacing: "-0.04em",
+            lineHeight: 1, color: "var(--text-faint)",
+          }}>{String((recIdx + 1) * 2 + 1).padStart(2, "0")}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRecRight = (rec, recIdx, theme) => {
+    const url = externalUrlFor(rec);
+    return (
+      <div style={{
+        height: "100%",
+        background: "var(--color-fun-white)",
+        display: "grid",
+        gridTemplateRows: "auto auto 1fr auto",
+        padding: "6% 7% 4%", gap: "0.75rem",
+        position: "relative",
+      }}>
+        {rec.intro && (
+          <p style={{
+            fontFamily: "var(--font-sketch)",
+            fontSize: "clamp(0.95rem, 1.25vw, 1.2rem)",
+            fontStyle: "italic", color: "var(--text-secondary)",
+            margin: 0, lineHeight: 1.35,
+          }}>{rec.intro}</p>
+        )}
+        <h2 style={{
+          fontFamily: "var(--font-display)", fontWeight: 900,
+          textTransform: "uppercase", letterSpacing: "-0.035em",
+          lineHeight: 0.92,
+          fontSize: "clamp(2rem, 4vw, 3.6rem)",
+          color: "var(--color-fun-ink)", margin: 0,
+          overflowWrap: "break-word", wordBreak: "break-word", hyphens: "auto",
+          display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>{rec.title}</h2>
+        <div style={{
+          minHeight: 0, overflowY: "auto",
+          display: "flex", flexDirection: "column",
+          gap: "1.1rem", paddingRight: "0.25rem",
+        }}>
+          <p style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "clamp(0.9rem, 1.15vw, 1.15rem)",
+            fontWeight: 500, lineHeight: 1.55,
+            color: "var(--color-fun-ink)", margin: 0,
+          }}>{rec.description}</p>
+          <div className="ami-why-block" style={{
+            background: theme.hex, borderRadius: "1.25rem",
+            padding: "1.1rem 1.25rem",
+            border: "2px solid var(--color-fun-ink)",
+            transform: "rotate(-0.6deg)", position: "relative",
+            boxShadow: "0 6px 14px rgba(0,0,0,0.08)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
+              <span className="ami-why-label" style={{
+                fontFamily: "var(--font-sketch)", fontSize: "0.85rem",
+                fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.2em",
+                color: "rgba(0,0,0,0.55)",
+              }}>Why this · for you</span>
+              {rec.mechanism && <MechanismPill mechanismId={rec.mechanism} color={undefined} />}
+            </div>
+            <p style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "clamp(0.85rem, 1.1vw, 1.05rem)",
+              fontWeight: 700, lineHeight: 1.45,
+              color: "#000", margin: 0,
+            }}>{rec.artisticConnection}</p>
+            {rec.paper && (
+              <p style={{
+                marginTop: "0.6rem", paddingTop: "0.5rem",
+                borderTop: "1px dashed rgba(0,0,0,0.25)",
+                fontFamily: "var(--font-body)", fontStyle: "italic",
+                fontSize: "0.7rem", lineHeight: 1.35,
+                color: "rgba(0,0,0,0.62)", margin: "0.6rem 0 0 0",
+              }}>{rec.paper}</p>
+            )}
+          </div>
+        </div>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          gap: "0.75rem",
+        }}>
+          {url ? (
+            <motion.a
+              href={url} target="_blank" rel="noopener noreferrer"
+              whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 1.25rem",
+                background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+                fontFamily: "var(--font-display)", fontWeight: 900,
+                fontSize: "0.85rem", letterSpacing: "0.08em", textTransform: "uppercase",
+                borderRadius: "9999px", textDecoration: "none",
+                boxShadow: "0 4px 0 0 " + theme.hex,
+              }}
+            >Let's go <ArrowUpRight size={14} /></motion.a>
+          ) : (
+            <span style={{
+              fontFamily: "var(--font-sketch)", fontSize: "1rem",
+              color: "var(--text-muted)", fontStyle: "italic",
+            }}>a memory to carry with you</span>
+          )}
+          <span style={{
+            fontFamily: "var(--font-display)", fontWeight: 900,
+            fontSize: "1.6rem", letterSpacing: "-0.04em",
+            lineHeight: 1, color: "var(--text-faint)",
+          }}>{String((recIdx + 1) * 2 + 2).padStart(2, "0")}</span>
+        </div>
+      </div>
+    );
+  };
+
+
+  // ── Anecdote spread: text flows across both pages, no poster ──────
+  const renderAnecdoteLeft = (rec, recIdx, theme) => {
+    const { body } = splitAnecdote(rec.description || "");
+    const iconFor = (t) => t === "anecdote" ? Heart : Sparkles;
+    const Icon = iconFor(rec.type);
+    const label = typeLabel(rec.type, typeIndexes[recIdx]);
+    return (
+      <div style={{
+        height: "100%",
+        background: "var(--color-fun-white)",
+        display: "grid", gridTemplateRows: "auto auto 1fr auto",
+        padding: "6% 7% 4%", gap: "0.9rem",
+        position: "relative",
+      }}>
+        {/* Type label */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.5rem",
+          color: theme.hex, fontFamily: "var(--font-body)",
+          fontSize: "0.65rem", fontWeight: 800,
+          letterSpacing: "0.35em", textTransform: "uppercase",
+        }}>
+          <Icon size={14} /> {label}
+        </div>
+        {/* Title */}
+        <h2 style={{
+          fontFamily: "var(--font-display)", fontWeight: 900,
+          textTransform: "uppercase", letterSpacing: "-0.035em",
+          lineHeight: 0.95, fontSize: "clamp(1.6rem, 3.2vw, 2.8rem)",
+          color: "var(--color-fun-ink)", margin: 0,
+          overflowWrap: "break-word", wordBreak: "break-word",
+        }}>
+          {rec.intro && (
+            <span style={{
+              display: "block",
+              fontFamily: "var(--font-sketch)",
+              fontSize: "clamp(0.85rem, 1.1vw, 1.05rem)",
+              fontWeight: 400, textTransform: "none", letterSpacing: "0",
+              color: "var(--text-secondary)", marginBottom: "0.4rem",
+              fontStyle: "italic",
+            }}>{rec.intro}</span>
+          )}
+          {rec.title}
+        </h2>
+        {/* Anecdote body text — no scroll, fits the page */}
+        <div style={{ minHeight: 0, overflowY: "auto" }}>
+          <p style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "clamp(0.82rem, 1.05vw, 1rem)",
+            fontWeight: 500, lineHeight: 1.65,
+            color: "var(--color-fun-ink)", margin: 0,
+          }}>{body}</p>
+        </div>
+        {/* Page number */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <span style={{
+            fontFamily: "var(--font-body)", fontSize: "0.6rem",
+            letterSpacing: "0.3em", textTransform: "uppercase",
+            color: "var(--text-faint)", fontWeight: 700,
+          }}>A Little Story</span>
+          <span style={{
+            fontFamily: "var(--font-display)", fontWeight: 900,
+            fontSize: "1.6rem", letterSpacing: "-0.04em",
+            lineHeight: 1, color: "var(--text-faint)",
+          }}>{String((recIdx + 1) * 2 + 1).padStart(2, "0")}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAnecdoteRight = (rec, recIdx, theme) => {
+    const { question } = splitAnecdote(rec.description || "");
+    return (
+      <div style={{
+        height: "100%",
+        background: theme.soft,
+        display: "grid", gridTemplateRows: "1fr auto auto",
+        padding: "8% 8% 5%", gap: "1.5rem",
+        position: "relative",
+      }}>
+        {/* Engaging question — the star of the right page */}
+        <div style={{
+          display: "flex", flexDirection: "column",
+          justifyContent: "center", gap: "1.25rem",
+        }}>
+          <span style={{
+            fontFamily: "var(--font-sketch)",
+            fontSize: "clamp(0.75rem, 1vw, 0.9rem)",
+            letterSpacing: "0.25em", textTransform: "uppercase",
+            color: "rgba(0,0,0,0.4)",
+          }}>And you?</span>
+          {question && (
+            <p style={{
+              fontFamily: "var(--font-display)", fontWeight: 900,
+              fontSize: "clamp(1.4rem, 2.6vw, 2.4rem)",
+              lineHeight: 1.15, color: "var(--color-fun-ink)",
+              margin: 0,
+            }}>{question}</p>
+          )}
+        </div>
+        {/* Why this helps — nostalgia mechanism */}
+        <div className="ami-why-block ami-why-anecdote" style={{
+          background: "var(--color-fun-white)", borderRadius: "1.25rem",
+          padding: "1rem 1.25rem",
+          border: "2px solid var(--color-fun-ink)",
+          transform: "rotate(0.5deg)",
+          boxShadow: "0 6px 14px rgba(0,0,0,0.08)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
+            <span className="ami-why-label" style={{
+              fontFamily: "var(--font-sketch)", fontSize: "0.75rem",
+              fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.2em",
+              color: "rgba(0,0,0,0.45)",
+            }}>Why this · for you</span>
+            <MechanismPill mechanismId="nostalgia" color={undefined} />
+          </div>
+          <p style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "clamp(0.8rem, 1vw, 0.95rem)",
+            fontWeight: 700, lineHeight: 1.45,
+            color: "#000", margin: 0,
+          }}>{rec.artisticConnection}</p>
+          {rec.paper && (
+            <p style={{
+              marginTop: "0.5rem", paddingTop: "0.4rem",
+              borderTop: "1px dashed rgba(0,0,0,0.2)",
+              fontFamily: "var(--font-body)", fontStyle: "italic",
+              fontSize: "0.65rem", lineHeight: 1.35,
+              color: "rgba(0,0,0,0.55)", margin: "0.5rem 0 0 0",
+            }}>{rec.paper}</p>
+          )}
+        </div>
+        {/* Page number */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <span style={{
+            fontFamily: "var(--font-display)", fontWeight: 900,
+            fontSize: "1.6rem", letterSpacing: "-0.04em",
+            lineHeight: 1, color: "rgba(0,0,0,0.15)",
+          }}>{String((recIdx + 1) * 2 + 2).padStart(2, "0")}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const pages = [];
+  const theme0 = THEMES[0];
+  pages.push(renderOvertureLeft(theme0));
+  pages.push(renderOvertureRight(theme0));
+  recs.forEach((rec, recIdx) => {
+    const t = THEMES[(recIdx + 1) % THEMES.length];
+    if (rec.type === "anecdote") {
+      pages.push(renderAnecdoteLeft(rec, recIdx, t));
+      pages.push(renderAnecdoteRight(rec, recIdx, t));
+    } else {
+      pages.push(renderRecLeft(rec, recIdx, t));
+      pages.push(renderRecRight(rec, recIdx, t));
+    }
+  });
+
+  const handleFlip = (e) => {
+    setSpread(Math.floor(e.data / 2));
+    setDetailsOpenFor(null);
+  };
+  const goNext = () => bookRef.current && bookRef.current.pageFlip().flipNext();
+  const goPrev = () => bookRef.current && bookRef.current.pageFlip().flipPrev();
+  const goTo   = (i) => bookRef.current && bookRef.current.pageFlip().flip(i * 2);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "ArrowRight" && spread < totalSpreads - 1) goNext();
+      else if (e.key === "ArrowLeft" && spread > 0) goPrev();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [spread, totalSpreads]);
+
+  return (
+    <div style={{
+      width: "100vw",
+      marginLeft: "calc(50% - 50vw)",
+      marginRight: "calc(50% - 50vw)",
+      marginTop: "3rem",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      gap: "1.25rem",
+    }}>
+      <div style={{
+        position: "relative",
+        width: bookSize.w, height: bookSize.h,
+        filter: "drop-shadow(0 30px 50px rgba(0,0,0,0.22))",
+      }}>
+        {!flipBookAvailable ? (
+          <div style={{
+            width: "100%", height: "100%",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: "1rem", textAlign: "center", padding: "2rem",
+            background: "var(--color-fun-white)",
+            border: "3px solid var(--color-fun-ink)",
+            borderRadius: "1rem",
+          }}>
+            <Book size={48} style={{ color: "var(--text-faint)" }} />
+            <p style={{
+              fontFamily: "var(--font-display)", fontWeight: 900,
+              fontSize: "1.1rem", color: "var(--color-fun-ink)", margin: 0,
+            }}>The flipbook engine didn't load</p>
+            <p style={{
+              fontFamily: "var(--font-body)", fontSize: "0.85rem",
+              color: "var(--text-muted)", margin: 0, maxWidth: "28rem",
+            }}>react-pageflip couldn't be fetched from the CDN. Re-run this
+            cell — esm.sh sometimes needs a moment to build a package on
+            first request.</p>
+          </div>
+        ) : (
+          <HTMLFlipBook
+            ref={bookRef}
+            key={"book-" + bookSize.pw + "x" + bookSize.ph + "-" + totalPages + "-" + mountTick}
+            width={bookSize.pw}
+            height={bookSize.ph}
+            size="fixed"
+            minWidth={280}
+            maxWidth={2000}
+            minHeight={360}
+            maxHeight={2400}
+            flippingTime={800}
+            maxShadowOpacity={0.55}
+            drawShadow={true}
+            useMouseEvents={true}
+            mobileScrollSupport={true}
+            swipeDistance={20}
+            usePortrait={false}
+            showCover={false}
+            disableFlipByClick={true}
+            clickEventForward={true}
+            showPageCorners={true}
+            onFlip={handleFlip}
+            className="ami-magazine-book"
+          >
+            {pages.map((content, i) => (
+              <FlipPage
+                key={"page-" + i}
+                number={i}
+                pageW={bookSize.pw}
+                pageH={bookSize.ph}
+              >
+                {content}
+              </FlipPage>
+            ))}
+          </HTMLFlipBook>
+        )}
+
+        {flipBookAvailable && spread > 0 && (
+          <button
+            type="button" onClick={goPrev} aria-label="Previous spread"
+            style={navBtnStyle(false)}
+          ><ChevronLeft size={22} /></button>
+        )}
+        {flipBookAvailable && spread < totalSpreads - 1 && (
+          <button
+            type="button" onClick={goNext} aria-label="Next spread"
+            style={navBtnStyle(true)}
+          ><ChevronRight size={22} /></button>
+        )}
+      </div>
+
+      <div style={{
+        display: "flex", alignItems: "center", gap: "0.5rem",
+        padding: "0.45rem 0.9rem",
+        background: "var(--border-soft)",
+        borderRadius: "9999px",
+      }}>
+        {Array.from({ length: totalSpreads }).map((_, i) => {
+          const t = THEMES[i % THEMES.length];
+          const active = i === spread;
+          return (
+            <button
+              key={i} type="button"
+              onClick={() => goTo(i)}
+              aria-label={i === 0 ? "Overture" : "Selection " + i}
+              style={{
+                width: active ? "2.5rem" : "0.7rem",
+                height: "0.7rem", borderRadius: "9999px",
+                border: "none", padding: 0, cursor: "pointer",
+                background: active ? t.hex : "var(--text-faint)",
+                transition: "width 0.4s ease, background 0.4s ease",
+              }}
+            />
+          );
+        })}
+      </div>
+
+      <div style={{
+        display: "flex", flexWrap: "wrap", gap: "1rem",
+        justifyContent: "center", alignItems: "center",
+      }}>
+        <span style={{
+          fontFamily: "var(--font-sketch)",
+          fontSize: "clamp(1.1rem, 1.6vw, 1.5rem)",
+          color: accent.hex, textTransform: "lowercase", fontStyle: "italic",
+        }}>{currentMood || "Ami"}</span>
+        <span style={{ width: "2.5rem", height: "1px", background: "var(--text-faint)" }} />
+        <span style={{
+          fontSize: "0.6rem", fontWeight: 800,
+          letterSpacing: "0.45em", textTransform: "uppercase",
+          color: "var(--text-muted)",
+        }}>
+          {spread === 0 ? "Overture" : "Selection " + spread + " of " + (totalSpreads - 1)}
+        </span>
+        <span style={{ width: "2.5rem", height: "1px", background: "var(--text-faint)" }} />
+        <motion.button
+          onClick={onSurpriseMe} disabled={loading}
+          animate={!loading ? { y: [0, -7, 0], rotate: [0, -1, 1, 0] } : {}}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          whileHover={{ scale: loading ? 1 : 1.08, rotate: loading ? 0 : -3, y: loading ? 0 : -12, transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 } }}
+          whileTap={{ scale: 0.95, rotate: (Math.random() - 0.5) * 15 }}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.5rem",
+            padding: "0.75rem 1.6rem", borderRadius: "9999px",
+            background: "var(--color-fun-yellow)", color: "var(--color-fun-ink)",
+            fontFamily: "var(--font-display)", fontWeight: 900,
+            fontSize: "0.85rem", letterSpacing: "0.02em",
+            border: "2px solid var(--color-fun-ink)",
+            cursor: loading ? "wait" : "pointer",
+            opacity: loading ? 0.6 : 1,
+            boxShadow: "0 6px 0 -1px var(--color-fun-ink)",
+            transition: "opacity 0.2s",
+          }}
+        >
+          {loading ? (
+            <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+          ) : (
+            <Sparkles size={14} strokeWidth={2.5} />
+          )}
+          <span>{loading ? "AMI IS THINKING…" : "SURPRISE ME"}</span>
+        </motion.button>
+        <motion.button
+          onClick={onReturn}
+          animate={{ y: [0, -5, 0], rotate: [0, 0.8, -0.8, 0] }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+          whileHover={{ scale: 1.08, y: -12, rotate: 3, transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 } }}
+          whileTap={{ scale: 0.95, rotate: (Math.random() - 0.5) * 15 }}
+          style={{
+            padding: "0.75rem 1.6rem", borderRadius: "9999px",
+            background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+            fontFamily: "var(--font-display)", fontWeight: 900,
+            fontSize: "0.85rem", border: "none", cursor: "pointer",
+            boxShadow: "0 8px 20px -5px rgba(0,0,0,0.25)",
+          }}
+        >DONE FOR TODAY</motion.button>
+      </div>
+    </div>
+  );
+}
+
+function Row({ k, v, accent }) {
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between", gap: "0.5rem",
+      padding: "0.2rem 0",
+    }}>
+      <span style={{ color: accent, opacity: 0.8, fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 800 }}>{k}</span>
+      <span style={{ color: "var(--color-fun-ink)", textAlign: "right", maxWidth: "60%", fontSize: "0.72rem", lineHeight: 1.25 }}>{v}</span>
+    </div>
+  );
+}
+
+function navBtnStyle(rightSide) {
+  return {
+    position: "absolute",
+    top: "50%",
+    [rightSide ? "right" : "left"]: "-1.6rem",
+    transform: "translateY(-50%)",
+    width: "2.8rem", height: "2.8rem", borderRadius: "9999px",
+    background: "var(--color-fun-white)",
+    color: "var(--color-fun-ink)",
+    border: "2px solid var(--color-fun-ink)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    cursor: "pointer", padding: 0,
+    boxShadow: "0 6px 16px rgba(0,0,0,0.18)",
+    zIndex: 30,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CrisisPanel
+// ─────────────────────────────────────────────────────────────────
+function CrisisPanel({ onContinue, onClose }) {
+  const helplines = [
+    { region: "International", line: "befrienders.org — find a helpline near you" },
+    { region: "USA",    line: "988 — Suicide & Crisis Lifeline" },
+    { region: "UK",     line: "116 123 — Samaritans" },
+    { region: "France", line: "3114 — Numéro national de prévention du suicide" },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0 }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 60,
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "1.5rem",
+        background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+      }}
+    >
+      <motion.div
+        initial={{ y: 40, rotate: -1 }}
+        animate={{ y: 0, rotate: 0 }}
+        className="sticker-shadow"
+        style={{
+          background: "var(--color-fun-white)",
+          maxWidth: "42rem", width: "100%",
+          padding: "3.5rem", borderRadius: "3rem",
+          border: "4px solid var(--color-fun-ink)",
+          position: "relative",
+          margin: "auto",
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute", top: "1.5rem", right: "1.5rem",
+            width: "2.5rem", height: "2.5rem", borderRadius: "9999px",
+            border: "2px solid var(--color-fun-ink)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "transparent", cursor: "pointer",
+          }}
+        >
+          <X size={20} />
+        </button>
+
+        <motion.div
+          animate={{ y: [0, -8, 0], rotate: [-2, 2, -2] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            width: "5rem", height: "5rem",
+            background: "var(--color-fun-pink)",
+            borderRadius: "1.5rem",
+            border: "4px solid var(--color-fun-ink)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            marginBottom: "2rem", transform: "rotate(-3deg)",
+          }}
+        >
+          <Heart size={40} fill="currentColor" />
+        </motion.div>
+
+        <h2 className="font-display" style={{ fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 900, marginBottom: "1.5rem", lineHeight: 1.1 }}>
+          <FloatingWords text="Take a breath." intensity={0.6} />
+          <br />
+          <FloatingWords text="You are not alone." style={{ color: "var(--color-fun-pink)" }} intensity={0.8} />
+        </h2>
+
+        <p style={{ fontSize: "1.125rem", color: "var(--text-secondary)", marginBottom: "2rem", lineHeight: 1.6 }}>
+          What you've shared sounds heavy. Before Ami hands you anything, please know that real people are ready to listen, right now.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "2.5rem" }}>
+          {helplines.map((h, i) => (
+            <div key={i} style={{
+              display: "flex", gap: "1rem", alignItems: "center",
+              padding: "1rem", background: "rgba(255,191,0,0.3)",
+              border: "2px solid var(--color-fun-ink)", borderRadius: "1rem",
+            }}>
+              <div style={{
+                width: "2.5rem", height: "2.5rem",
+                background: "var(--color-fun-yellow)",
+                borderRadius: "9999px", border: "2px solid var(--color-fun-ink)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}>
+                <Phone size={18} />
+              </div>
+              <div>
+                <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.875rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-secondary)" }}>{h.region}</span>
+                <p style={{ fontFamily: "var(--font-body)" }}>{h.line}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <button
+            onClick={onClose}
+            style={{
+              width: "100%", padding: "1.25rem 0",
+              background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+              borderRadius: "9999px", border: "none", cursor: "pointer",
+              fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "1.125rem",
+            }}
+          >
+            I'll reach out for help
+          </button>
+          <button
+            onClick={onContinue}
+            style={{
+              width: "100%", padding: "0.75rem 0",
+              color: "var(--text-secondary)", background: "transparent", border: "none",
+              fontFamily: "var(--font-body)", fontSize: "0.875rem",
+              textDecoration: "underline", cursor: "pointer",
+            }}
+          >
+            Continue gently anyway
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// DetailsModal
+// ─────────────────────────────────────────────────────────────────
+function DetailsModal({ payload, onClose }) {
+  if (!payload) return null;
+  const { recommendation, detailEntries, typeIndex } = payload;
+
+  const Icon = recommendation.type === "film" ? Video
+    : recommendation.type === "series" ? Tv
+    : Book;
+
+  const url = externalUrlFor(recommendation);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 70,
+        background: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "2rem 1rem",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, y: 30, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.92, y: 30, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        className="sticker-shadow"
+        style={{
+          background: "var(--color-fun-white)",
+          color: "var(--color-fun-ink)",
+          maxWidth: "64rem", width: "100%",
+          borderRadius: "3rem",
+          border: "4px solid var(--color-fun-ink)",
+          padding: "3rem clamp(1.5rem, 4vw, 3.5rem)",
+          margin: "auto",
+          flexShrink: 0,
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close details"
+          style={{
+            position: "absolute", top: "1.5rem", right: "1.5rem",
+            width: "3rem", height: "3rem", borderRadius: "9999px",
+            border: "3px solid var(--color-fun-ink)",
+            background: "var(--color-fun-white)",
+            color: "var(--color-fun-ink)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", zIndex: 2,
+          }}
+        >
+          <X size={20} strokeWidth={3} />
+        </button>
+
+        <div className="ami-modal-grid" style={{
+          display: "grid",
+          gridTemplateColumns: payload.recommendation.poster ? "minmax(0, 18rem) minmax(0, 1fr)" : "1fr",
+          gap: "2.5rem",
+          alignItems: "start",
+        }}>
+          {payload.recommendation.poster && (
+            <motion.div
+              whileHover={{ scale: 1.03, rotate: 1, y: -4, transition: { type: "spring", stiffness: 300, damping: 18 } }}
+              whileTap={{ scale: 0.97, rotate: -1 }}
+              style={{
+                position: "sticky",
+                top: "1rem",
+                width: "100%",
+                borderRadius: "1.75rem",
+                overflow: "hidden",
+                border: "3px solid var(--color-fun-ink)",
+                boxShadow: "0 0 0 3px var(--shadow-stroke), 6px 6px 0 0 var(--shadow-color)",
+                transform: "rotate(-1deg)",
+                background: "var(--color-fun-white)",
+                cursor: "pointer",
+              }}
+            >
+              <img
+                src={upgradePosterQuality(payload.recommendation.poster)}
+                alt={payload.recommendation.title}
+                loading="lazy"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  height: "auto",
+                  maxHeight: "26rem",
+                  objectFit: "cover",
+                  objectPosition: "top center",
+                }}
+                onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
+              />
+            </motion.div>
+          )}
+
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "2rem", paddingRight: "3rem" }}>
+              <motion.div
+                animate={{ y: [0, -6, 0], rotate: [3, -3, 3] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                  width: "3.5rem", height: "3.5rem", borderRadius: "9999px",
+                  border: "4px solid var(--color-fun-ink)",
+                  background: "var(--color-fun-pink)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon size={28} />
+              </motion.div>
+              <span style={{ fontFamily: "var(--font-sketch)", fontSize: "1.5rem", color: "var(--text-secondary)" }}>
+                {typeLabel(recommendation.type, typeIndex)}
+              </span>
+            </div>
+
+            <h2
+              className="storybook-title"
+              style={{
+                fontSize: "clamp(2.25rem, 6vw, 4.5rem)",
+                lineHeight: 1.05,
+                color: "white",
+                marginBottom: "1.5rem",
+                filter: "drop-shadow(0 10px 8px rgba(0,0,0,0.05))",
+              }}
+            >
+              {recommendation.title}
+            </h2>
+
+            <p style={{
+              fontSize: "1.25rem",
+              fontFamily: "var(--font-body)",
+              color: "var(--text-secondary)",
+              fontStyle: "italic",
+              lineHeight: 1.6,
+              marginBottom: "2.5rem",
+            }}>
+              {recommendation.description}
+            </p>
+
+            <div style={{
+              background: "var(--color-fun-pink)",
+              padding: "2rem 2.5rem",
+              border: "4px solid var(--color-fun-ink)",
+              borderRadius: "2rem",
+              marginBottom: "2rem",
+              transform: "rotate(-0.4deg)",
+            }}>
+              <p style={{
+                fontFamily: "var(--font-sketch)",
+                fontSize: "1.5rem",
+                marginBottom: "1rem",
+                color: "rgba(0,0,0,0.5)",
+                textDecoration: "underline",
+              }}>
+                ...the small print
+              </p>
+              <dl style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr",
+                rowGap: "0.75rem",
+                columnGap: "1.5rem",
+                fontFamily: "var(--font-body)",
+                fontSize: "1.05rem",
+                margin: 0,
+                color: "#000",
+              }}>
+                {detailEntries.map(([label, value]) => (
+                  <React.Fragment key={label}>
+                    <dt style={{
+                      fontFamily: "var(--font-display)",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      fontSize: "0.85rem",
+                      alignSelf: "center",
+                      color: "rgba(0,0,0,0.7)",
+                    }}>{label}</dt>
+                    <dd style={{ margin: 0, fontWeight: 500 }}>{value}</dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            </div>
+
+            <div style={{
+              background: "var(--color-fun-yellow)",
+              padding: "1.5rem 2rem",
+              border: "4px solid var(--color-fun-ink)",
+              borderRadius: "1.75rem",
+              marginBottom: url ? "2rem" : 0,
+              transform: "rotate(0.4deg)",
+            }}>
+              <p style={{
+                fontFamily: "var(--font-sketch)",
+                fontSize: "1.25rem",
+                marginBottom: "0.5rem",
+                color: "rgba(0,0,0,0.5)",
+                textDecoration: "underline",
+              }}>
+                why it might help...
+              </p>
+              <p style={{
+                fontSize: "1.125rem",
+                fontFamily: "var(--font-body)",
+                fontWeight: 600,
+                color: "#000",
+                lineHeight: 1.4,
+              }}>
+                {recommendation.artisticConnection}
+              </p>
+              {recommendation.paper && (
+                <p style={{
+                  marginTop: "0.875rem",
+                  fontSize: "0.85rem",
+                  fontFamily: "var(--font-body)",
+                  fontStyle: "italic",
+                  color: "rgba(0,0,0,0.65)",
+                  lineHeight: 1.45,
+                  borderTop: "1.5px dashed rgba(0,0,0,0.25)",
+                  paddingTop: "0.625rem",
+                }}>
+                  {recommendation.paper}
+                </p>
+              )}
+            </div>
+
+            {url && (
+              <motion.a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                whileHover={{ y: -4 }}
+                whileTap={{ y: 0, scale: 0.98 }}
+                className="sticker-shadow"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "1.25rem 2rem",
+                  background: "var(--color-fun-orange)",
+                  color: "white",
+                  border: "4px solid var(--color-fun-ink)",
+                  borderRadius: "1.5rem",
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 900,
+                  fontSize: "1.5rem",
+                  textAlign: "center",
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  transition: "transform 0.2s",
+                }}
+              >
+                LET'S GO!
+              </motion.a>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ThesisModal
+// ─────────────────────────────────────────────────────────────────
+function ThesisModal({ thesis, thematicChart, currentMood, onClose }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 70,
+        background: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "2rem 1rem",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, y: 30, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.92, y: 30, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        className="sticker-shadow"
+        style={{
+          background: "var(--color-fun-white)",
+          color: "var(--color-fun-ink)",
+          maxWidth: "56rem", width: "100%",
+          borderRadius: "3rem",
+          border: "4px solid var(--color-fun-ink)",
+          padding: "clamp(2.5rem, 5vw, 4.5rem)",
+          margin: "auto",
+          flexShrink: 0,
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close thesis"
+          style={{
+            position: "absolute", top: "1.5rem", right: "1.5rem",
+            width: "3rem", height: "3rem", borderRadius: "9999px",
+            border: "3px solid var(--color-fun-ink)",
+            background: "var(--color-fun-white)",
+            color: "var(--color-fun-ink)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", zIndex: 2,
+          }}
+        >
+          <X size={20} strokeWidth={3} />
+        </button>
+
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+          gap: "1.5rem", flexWrap: "wrap",
+          marginBottom: "2.5rem", paddingRight: "3rem",
+        }}>
+          <motion.div
+            animate={{ y: [0, -6, 0], rotate: [6, -6, 6] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            style={{
+              width: "5rem", height: "5rem",
+              background: "var(--color-fun-yellow)",
+              borderRadius: "1.25rem",
+              border: "3px solid var(--color-fun-ink)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Quote size={42} />
+          </motion.div>
+          <MoodShape mood={currentMood} />
+        </div>
+
+        <p style={{
+          fontSize: "clamp(1.75rem, 3.6vw, 2.75rem)",
+          fontFamily: "var(--font-display)",
+          fontWeight: 900,
+          lineHeight: 1.25,
+          color: "var(--color-fun-ink)",
+          margin: 0,
+          marginBottom: "3rem",
+        }}>
+          {thesis}
+        </p>
+
+        <div style={{
+          height: "280px",
+          background: "rgba(162, 255, 0, 0.18)",
+          borderRadius: "1.5rem",
+          padding: "1.25rem",
+          border: "2px solid var(--border-soft)",
+          marginBottom: "2.5rem",
+        }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={thematicChart}>
+              <Area type="stepAfter" dataKey="value" stroke="#101112" strokeWidth={5} fill="#FFC0CB" fillOpacity={0.8} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <p style={{
+          fontFamily: "var(--font-sketch)",
+          fontSize: "1.25rem",
+          color: "var(--text-muted)",
+          textAlign: "center",
+          margin: 0,
+        }}>
+          your emotional landscape, woven into research
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+//
+// ─────────────────────────────────────────────────────────────────
+async function fetchRecommendations({
+  freeText, selectedMoods, birthYear,
+  continueAnyway = false, nonce = null, imageB64 = null,
+  onProgress = null,
+}) {
+  const response = await fetch("/api/recommend", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept":       "text/event-stream",
+    },
+    body: JSON.stringify({
+      free_text:       freeText,
+      selected_moods:  (selectedMoods || []).map((m) => m.toLowerCase()),
+      birth_year:      parseInt(birthYear, 10),
+      lang:            "en",
+      continue_anyway: continueAnyway,
+      agentic:         false,
+      nonce:           nonce,
+      image_b64:       imageB64,
+    }),
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(\`API \${response.status}: \${await response.text()}\`);
+  }
+
+  const reader  = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer    = "";
+  const collectedItems = [];
+  let crisis = false;
+  let crisisPayload = null;
+  let donePayload = null;
+  let serverError = null;
+
+  const dispatch = (eventName, dataObj) => {
+    if (eventName === "status" && onProgress) {
+      onProgress({ step: dataObj.step, msg: dataObj.msg, elapsed: dataObj.elapsed });
+    } else if (eventName === "item") {
+      collectedItems.push(dataObj.item);
+      if (onProgress) onProgress({ step: "item", msg: \`Found \${collectedItems.length} works\`, item: dataObj.item });
+    } else if (eventName === "done") {
+      donePayload = dataObj;
+    } else if (eventName === "crisis") {
+      crisis = true;
+      crisisPayload = dataObj;
+    } else if (eventName === "vision_insight") {
+      if (onProgress) onProgress({ step: "vision_insight", insight: dataObj });
+    } else if (eventName === "error") {
+      serverError = dataObj.error || "unknown error";
+    }
+  };
+
+  const processBuffer = () => {
+    let idx;
+    while ((idx = buffer.indexOf("\\n\\n")) !== -1 || (idx = buffer.indexOf("\\r\\n\\r\\n")) !== -1) {
+      const sepLen = buffer.slice(idx, idx + 4) === "\\r\\n\\r\\n" ? 4 : 2;
+      const frame = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + sepLen);
+      let eventName = "message";
+      let dataLines = [];
+      for (const line of frame.split(/\\r?\\n/)) {
+        if (line.startsWith("event:")) eventName = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+      }
+      if (dataLines.length === 0) continue;
+      try {
+        const data = JSON.parse(dataLines.join("\\n"));
+        dispatch(eventName, data);
+      } catch (e) {
+        console.warn("SSE frame parse failed:", e, frame);
+      }
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    processBuffer();
+  }
+  buffer += decoder.decode();
+  processBuffer();
+
+  if (serverError) throw new Error(serverError);
+  if (crisis) {
+    return {
+      crisis:          true,
+      thesis:          "",
+      recommendations: [],
+      thematicChart:   [],
+      psychProfile:    null,
+      safety:          (crisisPayload && crisisPayload.safety) || { level: "crisis" },
+      timings:         null,
+      warning:         null,
+    };
+  }
+  if (!donePayload) {
+    throw new Error("Stream ended without 'done' event");
+  }
+
+  const recommendations = collectedItems.map((it) => {
+    const creator =
+      it.director ||
+      (Array.isArray(it.creators) ? it.creators.join(", ") : it.creators) ||
+      it.author ||
+      "";
+    const description = it.description || it.overview || it.anecdote || "";
+    const artisticConnection = it.why || "";
+    const personalIntro = it.personal_intro || it.personal_why || "";
+    const details = {};
+    if (it.runtime)  details.runtime  = \`\${it.runtime} min\`;
+    if (it.seasons)  details.seasons  = it.seasons;
+    if (it.episodes) details.episodes = it.episodes;
+    if (it.pages)    details.pages    = it.pages;
+    if (it.rating)   details.rating   = \`\${it.rating}/10\`;
+    if (Array.isArray(it.genres) && it.genres.length)   details.genres = it.genres;
+    if (Array.isArray(it.cast) && it.cast.length)       details.cast = it.cast.slice(0, 4);
+    if (Array.isArray(it.networks) && it.networks.length) details.networks = it.networks;
+    if (Array.isArray(it.subjects) && it.subjects.length) details.subjects = it.subjects.slice(0, 4);
+    if (it.section)          details.section = it.section;
+    if (it.birth_year_range) details.era = it.birth_year_range;
+    if (it.decade)           details.decade = it.decade;
+    if (it.mechanism)        details.mechanism = it.mechanism;
+    if (Array.isArray(it.moods) && it.moods.length) details.moods = it.moods;
+    return {
+      id:                 it.id,
+      type:               it.type,
+      title:              it.title,
+      year:               it.year,
+      poster:             it.poster || null,
+      tmdbId:             it.tmdb_id || null,
+      olKey:              it.ol_key || null,
+      creator,
+      description,
+      artisticConnection,
+      intro:              personalIntro,
+      paper:              it.paper || "",
+      mechanism:          it.mechanism || null,
+      details,
+    };
+  });
+
+  return {
+    crisis:          false,
+    thesis:          donePayload.thesis || "",
+    recommendations,
+    thematicChart: (donePayload.thematic_data || []).map((t) => ({ name: t.name, value: t.value })),
+    psychProfile:  donePayload.psych_profile || null,
+    safety:        donePayload.safety || null,
+    timings:       donePayload.timings || null,
+    warning:       donePayload.warning || null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Client-side crisis detection
+// ─────────────────────────────────────────────────────────────────
+const CRISIS_PATTERNS = [
+  /\\b(kill|hurt|harm)(ing|s|ed)?\\s+(my\\s*self|me)\\b/i,
+  /\\b(thinking|think|thought|want|wanna|going|plan)\\s+(of|about|to)\\s+(kill|hurt|harm)/i,
+  /\\bsuicid(e|al|ality)\\b/i,
+  /\\bend\\s+(it\\s+all|my\\s+life|everything|things|it)\\b/i,
+  /\\b(want|wanna|going|wish|hope)\\s+(to\\s+)?(die|be\\s+dead|not\\s+exist)\\b/i,
+  /\\bi\\s+(want|wanna|wish)\\s+(to\\s+)?die\\b/i,
+  /\\bno\\s+reason\\s+to\\s+live\\b/i,
+  /\\bcan'?t\\s+(go\\s+on|take\\s+it|do\\s+this|live)\\b/i,
+  /\\bdon'?t\\s+want\\s+to\\s+(live|be\\s+here|exist|wake\\s+up)\\b/i,
+  /\\b(self[-\\s]?harm|cutting\\s+myself|hurting\\s+myself)\\b/i,
+  /\\b(overdose|hang\\s+myself|jump\\s+off)\\b/i,
+  /\\bbetter\\s+off\\s+(without\\s+me|dead|gone)\\b/i,
+];
+function detectCrisis(text) {
+  const t = String(text || "").toLowerCase();
+  return CRISIS_PATTERNS.some((re) => re.test(t));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+function moodMaskIndex(mood) {
+  const m = (mood || "").toLowerCase();
+  if (/peace|calm|nostalg|hope|grateful|joy|smil|happy/.test(m))     return 5;
+  if (/angry|cynic|exhaust|frustrat|tired/.test(m))                  return 4;
+  if (/anxious|lost|overwhelm|scared|panic|worried/.test(m))         return 2;
+  if (/sad|empty|discour|grief|grieving|broken|hopeless/.test(m))    return 3;
+  return 1;
+}
+
+function upgradePosterQuality(url) {
+  if (!url) return url;
+  if (url.includes("image.tmdb.org/t/p/")) {
+    return url.replace(/\\/t\\/p\\/w\\d+\\//, "/t/p/w780/");
+  }
+  if (url.includes("covers.openlibrary.org")) {
+    return url.replace(/-[SML]\\.jpg$/, "-L.jpg");
+  }
+  return url;
+}
+
+function externalUrlFor(rec) {
+  if (rec.tmdbId) {
+    if (rec.type === "film")   return \`https://www.themoviedb.org/movie/\${rec.tmdbId}\`;
+    if (rec.type === "series") return \`https://www.themoviedb.org/tv/\${rec.tmdbId}\`;
+  }
+  if (rec.olKey && rec.type === "novel") {
+    return \`https://openlibrary.org\${rec.olKey}\`;
+  }
+  const q = encodeURIComponent(\`\${rec.title || ""} \${rec.year && rec.year !== "Memory" ? rec.year : ""}\`.trim());
+  if (rec.type === "film")    return \`https://www.themoviedb.org/search/movie?query=\${q}\`;
+  if (rec.type === "series")  return \`https://www.themoviedb.org/search/tv?query=\${q}\`;
+  if (rec.type === "novel")   return \`https://openlibrary.org/search?q=\${q}\`;
+  return null;
+}
+
+function typeLabel(type, index) {
+  if (type === "anecdote") return "A Little Story";
+  if (type === "film")     return \`Film #\${index + 1}\`;
+  if (type === "series")   return \`Series #\${index + 1}\`;
+  if (type === "novel")    return \`Novel #\${index + 1}\`;
+  return \`Discovery #\${index + 1}\`;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Mechanism data
+// ─────────────────────────────────────────────────────────────────
+const MECHS = [
+  {
+    id: "nostalgia",
+    label: "Nostalgia",
+    freq: "88.1",
+    color: "#FFBF00",
+    desc: "A bittersweet, self-relevant social emotion triggered by meaningful past experiences. It increases perceived self-continuity, social connectedness, and sense of meaning, counteracting loneliness, emptiness, and meaninglessness.",
+    paper: "Sedikides & Wildschut, 2018 — Finding Meaning in Nostalgia. Review of General Psychology.",
+  },
+  {
+    id: "transport",
+    label: "Narrative Transport",
+    freq: "89.4",
+    color: "#38BDF8",
+    desc: "Complete absorption in a narrative world reduces self-consciousness, mental chatter, and rumination. The more fully transported, the stronger the emotional change, even toward dark stories. Best for overthinking and restlessness.",
+    paper: "Green & Brock, 2000 — The Role of Transportation in the Persuasiveness of Public Narratives. Journal of Personality and Social Psychology.",
+  },
+  {
+    id: "awe",
+    label: "Awe",
+    freq: "90.7",
+    color: "#A2FF00",
+    desc: "Exposure to something vast or beautiful that challenges current mental frameworks shrinks the perceived size of the self and its problems, expands perceived time, and increases curiosity. Very effective for anxiety.",
+    paper: "Stellar et al., 2015 — Self-Transcendent Emotions and Their Social Functions. Emotion.",
+  },
+  {
+    id: "elevation",
+    label: "Elevation",
+    freq: "92.3",
+    color: "#D1FAE5",
+    desc: "Witnessing extraordinary moral beauty, virtue, or human excellence (even in fiction) triggers a warm, uplifting sensation and a strong motivation to be a better person. Reduces cynicism and discouragement powerfully.",
+    paper: "Algoe & Haidt, 2009 — Witnessing Excellence in Action. Journal of Positive Psychology.",
+  },
+  {
+    id: "benign_masochism",
+    label: "Benign Masochism",
+    freq: "93.6",
+    color: "#E8B4AA",
+    desc: "Intense negative emotions (sadness, fear, tension, disgust) through fiction are paradoxically pleasurable because the brain registers the safety of the fictional frame. The emotional arousal is real but the threat is not, this gap creates catharsis.",
+    paper: "Hanich et al., 2014 — Why We Like to Watch Sad Films. Psychology of Aesthetics, Creativity, and the Arts.",
+  },
+  {
+    id: "parasocial",
+    label: "Parasocial Bond",
+    freq: "95.1",
+    color: "#E6E6FA",
+    desc: "One-sided emotional bonds with fictional characters activate the same neural systems as real friendships: they satisfy belonging needs, create a felt sense of being known, and reduce loneliness. The bond strengthens with repeated exposure.",
+    paper: "Giles, 2002 — Parasocial Interaction: A Review of the Literature. Media Psychology.",
+  },
+  {
+    id: "social_surrogate",
+    label: "Social Surrogate",
+    freq: "96.8",
+    color: "#FED7AA",
+    desc: "Familiar shows and beloved books function as social surrogates: their recurring characters and settings provide a felt sense of belonging and comfort. Revisiting a known show can be more effective than watching something new, familiarity is the therapeutic agent.",
+    paper: "Derrick, Gabriel & Hugenberg, 2009 — Social Surrogacy. Journal of Experimental Social Psychology.",
+  },
+  {
+    id: "self_expansion",
+    label: "Self-Expansion",
+    freq: "98.2",
+    color: "#DBEAFE",
+    desc: "Engaging with perspectives or worlds radically different from one's own expands the psychological self and generates a felt sense of growth and possibility. Most powerful for boredom, emptiness, feeling stuck, or loss of meaning.",
+    paper: "Aron et al., 1992 — Inclusion of Other in the Self Scale. Journal of Personality and Social Psychology.",
+  },
+  {
+    id: "prosocial",
+    label: "Prosocial Narrative",
+    freq: "99.9",
+    color: "#FEF9C3",
+    desc: "Stories centered on kindness, cooperation, solidarity, or altruism activate reward circuits and reduce ruminative thinking. Most effective for cynicism, discouragement, guilt; states where someone has lost faith in human goodness.",
+    paper: "Raposa et al., 2016 — Prosocial Behavior Mitigates the Negative Effects of Stress. Clinical Psychological Science.",
+  },
+  {
+    id: "involuntary_memory",
+    label: "Involuntary Memory",
+    freq: "101.3",
+    color: "#EDE9FE",
+    desc: "Specific sensory details (a melody, a visual palette, an ambient sound) bypass conscious recall and trigger vivid, emotionally rich autobiographical memories. The Proustian mechanism. Most effective for nostalgia, melancholy, and grief.",
+    paper: "Chu & Downes, 2000 — Odour-Evoked Autobiographical Memories. Chemical Senses.",
+  },
+  {
+    id: "incongruence",
+    label: "Emotional Incongruence",
+    freq: "103.7",
+    color: "#FFE4E6",
+    desc: "Exposure to a mood slightly different from one's current emotional state is often more therapeutic than mood-matching. The slight shift creates distance from the stuck state, it should feel like a gentle pivot, not an escape.",
+    paper: "Zillmann, 1988 — Mood Management Through Communication Choices. American Behavioral Scientist.",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────
+// TunerDial
+// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// MechanismPill — clickable mechanism badge with inline definition tooltip
+// ─────────────────────────────────────────────────────────────────
+function MechanismPill({ mechanismId, color }) {
+  const [open, setOpen] = React.useState(false);
+  const mech = MECHS.find((m) => m.id === mechanismId);
+  if (!mech) return null;
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <motion.button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        whileHover={{ scale: 1.06 }}
+        whileTap={{ scale: 0.95 }}
+        className="ami-mech-tag"
+        style={{
+          display: "inline-flex", alignItems: "center", gap: "0.3em",
+          background: color || mech.color,
+          border: "1.5px solid var(--color-fun-ink)",
+          borderRadius: "9999px",
+          padding: "0.2em 0.75em",
+          fontFamily: "var(--font-body)",
+          fontWeight: 800,
+          fontSize: "0.7rem",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "#000",
+          cursor: "pointer",
+          boxShadow: open ? "0 0 0 2px var(--color-fun-ink)" : "none",
+          transition: "box-shadow 0.15s",
+        }}
+      >
+        {mech.label}
+        <span style={{ fontSize: "0.65em", opacity: 0.7 }}>{open ? "▲" : "▼"}</span>
+      </motion.button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.95 }}
+            transition={{ duration: 0.18 }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute", bottom: "calc(100% + 0.5rem)", left: "50%",
+              transform: "translateX(-50%)",
+              width: "clamp(200px, 28vw, 300px)",
+              background: "var(--color-fun-white)",
+              border: "2px solid var(--color-fun-ink)",
+              borderRadius: "1rem",
+              padding: "0.9rem 1rem",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+              zIndex: 50,
+            }}
+          >
+            {/* Triangle pointer */}
+            <div style={{
+              position: "absolute", bottom: "-0.55rem", left: "50%",
+              transform: "translateX(-50%)",
+              width: 0, height: 0,
+              borderLeft: "7px solid transparent",
+              borderRight: "7px solid transparent",
+              borderTop: "8px solid var(--color-fun-ink)",
+            }} />
+            <div style={{
+              fontFamily: "var(--font-sketch)",
+              fontSize: "0.68rem",
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              color: "var(--text-muted)",
+              marginBottom: "0.4rem",
+            }}>{mech.label}</div>
+            <p style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "0.78rem",
+              lineHeight: 1.55,
+              color: "var(--color-fun-ink)",
+              margin: "0 0 0.5rem",
+            }}>{mech.desc}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function TunerDial({ mechs, dark }) {
+  const [current, setCurrent] = React.useState(2);
+  const [transitioning, setTransitioning] = React.useState(false);
+  const [cardKey, setCardKey] = React.useState(0);
+
+  const TOTAL = mechs.length;
+
+  function getNeedleLeft(idx) {
+    const w = 100 / TOTAL;
+    return (idx * w + w / 2) + "%";
+  }
+
+  function getDialAngle(idx) {
+    return -90 + (idx / (TOTAL - 1)) * 180;
+  }
+
+  function getHandCoords(idx) {
+    const angle = getDialAngle(idx);
+    const rad = (angle * Math.PI) / 180;
+    const cx = 100, cy = 95, r = 70;
+    return { x2: cx + r * Math.sin(rad), y2: cy - r * Math.cos(rad) };
+  }
+
+  function getArcPath(idx) {
+    const cx = 100, cy = 95, r2 = 78;
+    const startRad = (-90 * Math.PI) / 180;
+    const endAngle = getDialAngle(idx);
+    const endRad = (endAngle * Math.PI) / 180;
+    const sx = cx + r2 * Math.sin(startRad);
+    const sy = cy - r2 * Math.cos(startRad);
+    const ex = cx + r2 * Math.sin(endRad);
+    const ey = cy - r2 * Math.cos(endRad);
+    const large = endAngle + 90 > 180 ? 1 : 0;
+    return \`M\${sx} \${sy} A\${r2} \${r2} 0 \${large} 1 \${ex} \${ey}\`;
+  }
+
+  function tune(idx) {
+    if (idx === current || transitioning) return;
+    setTransitioning(true);
+    setTimeout(() => {
+      setCurrent(idx);
+      setCardKey(k => k + 1);
+      setTransitioning(false);
+    }, 220);
+  }
+
+  const m = mechs[current];
+  const hand = getHandCoords(current);
+  const inkColor = dark ? "#cbd5e1" : "#000000";
+  const bgColor  = dark ? "#0f172a" : "#ffffff";
+  const mutedColor = dark ? "rgba(203,213,225,0.4)" : "rgba(0,0,0,0.25)";
+  const trackBg   = dark ? "rgba(203,213,225,0.07)" : "rgba(0,0,0,0.04)";
+  const signalBars = [8, 13, 17, 13, 8];
+  const signalStrength = Math.round(3 + Math.abs(Math.sin(current * 1.7)) * 2);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: 0.1 }}
+      style={{
+        background: "var(--color-fun-white)",
+        border: "2px solid var(--color-fun-ink)",
+        borderRadius: "2rem",
+        padding: "2rem 1.75rem",
+        fontFamily: "var(--font-body)",
+      }}
+      className="sticker-shadow"
+    >
+      <div style={{ position: "relative", marginBottom: 0 }}>
+        <div style={{
+          display: "flex", height: "52px",
+          background: trackBg,
+          borderRadius: "0.75rem",
+          border: "2px solid var(--color-fun-ink)",
+          overflow: "hidden",
+        }}>
+          {mechs.map((mech, i) => (
+            <motion.div
+              key={mech.id}
+              onClick={() => tune(i)}
+              whileHover={{ backgroundColor: mech.color + "55" }}
+              style={{
+                flex: 1,
+                display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center",
+                cursor: "pointer", gap: "3px",
+                borderRight: i < TOTAL - 1 ? "1px solid var(--color-fun-ink)" : "none",
+                background: i === current ? mech.color + "44" : "transparent",
+                transition: "background 0.2s ease",
+              }}
+            >
+              <motion.div
+                animate={{ scale: i === current ? 1.4 : 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                style={{
+                  width: i === current ? "8px" : "5px",
+                  height: i === current ? "8px" : "5px",
+                  borderRadius: "50%",
+                  background: i === current ? m.color : mutedColor,
+                  transition: "all 0.2s",
+                }}
+              />
+              <span style={{
+                fontSize: "9px",
+                color: i === current ? "var(--color-fun-ink)" : mutedColor,
+                fontWeight: i === current ? 700 : 400,
+                letterSpacing: "0.02em",
+                lineHeight: 1,
+              }}>{mech.freq}</span>
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.div
+          animate={{ left: getNeedleLeft(current) }}
+          transition={{ type: "spring", stiffness: 260, damping: 28 }}
+          style={{
+            position: "absolute", top: "-10px",
+            width: "2px", background: "var(--color-fun-ink)",
+            height: "72px", transform: "translateX(-50%)",
+            borderRadius: "1px", pointerEvents: "none",
+          }}
+        >
+          <div style={{
+            position: "absolute", top: "-6px", left: "50%", transform: "translateX(-50%)",
+            width: 0, height: 0,
+            borderLeft: "5px solid transparent",
+            borderRight: "5px solid transparent",
+            borderBottom: \`8px solid var(--color-fun-ink)\`,
+          }} />
+        </motion.div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "2rem", margin: "1.5rem 0 1.25rem" }}>
+        <svg width="180" height="90" viewBox="0 0 200 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M12 95 A88 88 0 0 1 188 95" stroke={mutedColor} strokeWidth="1" fill="none"/>
+          <path d="M22 95 A78 78 0 0 1 178 95" stroke={mutedColor} strokeWidth="3.5" fill="none" strokeLinecap="round"/>
+          <motion.path
+            animate={{ d: getArcPath(current) }}
+            transition={{ type: "spring", stiffness: 220, damping: 26 }}
+            stroke={m.color} strokeWidth="3.5" fill="none" strokeLinecap="round"
+          />
+          <circle cx="100" cy="95" r="13" fill={bgColor} stroke={inkColor} strokeWidth="1.5"/>
+          <motion.line
+            animate={{ x2: hand.x2, y2: hand.y2 }}
+            transition={{ type: "spring", stiffness: 220, damping: 26 }}
+            x1="100" y1="95" stroke={inkColor} strokeWidth="2.5" strokeLinecap="round"
+          />
+          <circle cx="100" cy="95" r="4" fill={inkColor}/>
+          <text x="8" y="108" fontSize="8" fill={mutedColor} fontFamily="var(--font-body)">{mechs[0].freq}</text>
+          <text x="158" y="108" fontSize="8" fill={mutedColor} fontFamily="var(--font-body)">{mechs[TOTAL-1].freq}</text>
+        </svg>
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", paddingBottom: "8px" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: "3px", height: "22px" }}>
+            {signalBars.map((h, bi) => (
+              <motion.div
+                key={bi}
+                animate={{ height: \`\${h}px\`, background: bi < signalStrength ? m.color : mutedColor }}
+                transition={{ duration: 0.3 }}
+                style={{ width: "5px", borderRadius: "2px" }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: "11px", color: mutedColor, letterSpacing: "0.06em", fontFamily: "var(--font-body)" }}>
+            {m.freq} FM
+          </span>
+        </div>
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={cardKey}
+          initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
+          animate={{ opacity: transitioning ? 0.3 : 1, y: 0, filter: transitioning ? "blur(3px)" : "blur(0px)" }}
+          exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          transition={{ duration: 0.25 }}
+          style={{
+            borderTop: \`3px solid \${m.color}\`,
+            paddingTop: "1.25rem",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+            <FloatingWords
+              text={m.label}
+              style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(1.3rem, 3vw, 1.7rem)", letterSpacing: "-0.01em" }}
+              intensity={0.6}
+            />
+            <motion.span
+              animate={{ backgroundColor: [m.color + "88", m.color + "dd", m.color + "88"] }}
+              transition={{ duration: 3, repeat: Infinity }}
+              className="ami-mech-tag"
+              style={{
+                fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.1em",
+                color: "#000", borderRadius: "9999px",
+                padding: "0.2rem 0.7rem", textTransform: "uppercase",
+                fontFamily: "var(--font-body)", border: "1.5px solid var(--color-fun-ink)",
+              }}
+            >
+              {m.label}
+            </motion.span>
+          </div>
+          <FloatingWords
+            text={m.desc}
+            style={{ fontFamily: "var(--font-body)", fontSize: "clamp(0.95rem, 1.8vw, 1.05rem)", color: "var(--text-secondary)", lineHeight: 1.7, display: "block", marginBottom: "1rem" }}
+            intensity={0.2}
+          />
+          <p style={{ fontSize: "0.75rem", fontFamily: "var(--font-body)", fontStyle: "italic", color: "var(--text-muted)", lineHeight: 1.5, borderTop: "1px solid var(--border-soft)", paddingTop: "0.75rem" }}>
+            {m.paper}
+          </p>
+        </motion.div>
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+// MoodMaskGallery — 5 hand-drawn masks revealed on scroll,
+// ordered so the smiling mask (5) is always last.
+// Each mask reacts to hover (tilt + lift) and can be dragged.
+// ─────────────────────────────────────────────────────────────────
+const MASK_ORDER = [1, 2, 3, 4, 5]; // mask 5 = serene/smiling, always last
+
+function MoodMaskGallery() {
+  const rotations = [-6, 4, -3, 5, -2];
+  const delays    = [0, 0.12, 0.24, 0.36, 0.48];
+  const yOffsets  = [0, 20, -10, 15, -5];
+
+  return (
+    <div style={{
+      width: "100%",
+      maxWidth: "900px",
+      margin: "0 auto",
+      padding: "3rem 1.5rem 1rem",
+      /* No overflow — all masks fully visible, no scrollbar */
+      display: "grid",
+      gridTemplateColumns: "repeat(5, 1fr)",
+      alignItems: "flex-end",
+      gap: "clamp(0.5rem, 1.5vw, 1.25rem)",
+    }}>
+      {MASK_ORDER.map((maskIdx, i) => (
+        <motion.div
+          key={maskIdx}
+          initial={{ opacity: 0, y: 50, rotate: rotations[i] * 0.5 }}
+          whileInView={{ opacity: 1, y: yOffsets[i], rotate: rotations[i] }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{
+            duration: 0.65,
+            delay: delays[i],
+            type: "spring",
+            stiffness: 90,
+            damping: 14,
+          }}
+          drag
+          dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+          dragElastic={0.15}
+          whileHover={{
+            y: yOffsets[i] - 16,
+            rotate: rotations[i] * -0.5,
+            scale: 1.06,
+            zIndex: 10,
+            transition: { type: "spring", stiffness: 300, damping: 18 },
+          }}
+          whileTap={{ scale: 0.95 }}
+          style={{
+            cursor: "grab",
+            width: "100%",
+            filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.15))",
+            position: "relative",
+            zIndex: i,
+          }}
+        >
+          <img
+            src={\`/static/mood-\${maskIdx}.webp\`}
+            alt={\`mood mask \${maskIdx}\`}
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+            draggable={false}
+          />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function Ami() {
+  const [loading, setLoading] = useState(false);
+  const [progressMsg, setProgressMsg] = useState("");
+  const [visionInsight, setVisionInsight] = useState(null);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [scrolled, setScrolled] = useState(false);
+  const [isResearching, setIsResearching] = useState(false);
+  const [showAllMechanisms, setShowAllMechanisms] = useState(false);
+  const [currentMood, setCurrentMood] = useState("");
+  const [badgeVisible, setBadgeVisible] = useState(true);
+  const [crisisOpen, setCrisisOpen] = useState(false);
+  const [pendingContinue, setPendingContinue] = useState(null);
+  const [detailsPayload, setDetailsPayload] = useState(null);
+  const [thesisOpen, setThesisOpen] = useState(false);
+  const [lastPayload, setLastPayload] = useState(null);
+  const resultsRef = React.useRef(null);
+  const visionInsightRef = React.useRef(null);
+
+  useEffect(() => {
+    if (!result) return;
+    const t1 = requestAnimationFrame(() => {
+      const t2 = setTimeout(() => {
+        if (resultsRef.current) {
+          resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 150);
+      resultsRef._t = t2;
+    });
+    return () => {
+      cancelAnimationFrame(t1);
+      if (resultsRef._t) clearTimeout(resultsRef._t);
+    };
+  }, [result]);
+
+  // Scroll to First Reading card when it appears
+  useEffect(() => {
+    if (!visionInsight) return;
+    const t = setTimeout(() => {
+      if (visionInsightRef.current) {
+        visionInsightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [visionInsight]);
+
+  const initialDark = (() => {
+    if (typeof window === "undefined") return false;
+    const h = new Date().getHours();
+    return h >= 19 || h < 7;
+  })();
+  const [darkMode, setDarkMode] = useState(initialDark);
+  const [manualThemeOverride, setManualThemeOverride] = useState(false);
+
+  useEffect(() => {
+    if (manualThemeOverride) return;
+    const tick = () => {
+      const h = new Date().getHours();
+      setDarkMode(h >= 19 || h < 7);
+    };
+    tick();
+    const id = setInterval(tick, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [manualThemeOverride]);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const handleAnalyze = async (payload, bypassCrisis = false, nonce = null) => {
+    const { freeText = "", selectedMoods = [], birthYear, imageB64 = null } = payload || {};
+    setError(null);
+
+    const moodLabel = freeText || selectedMoods.join(", ");
+    setCurrentMood(moodLabel);
+    setResult(null);
+    setLastPayload(payload);
+
+    const combinedForCrisis = [freeText, selectedMoods.join(" ")].filter(Boolean).join(" ");
+
+    if (!bypassCrisis && detectCrisis(combinedForCrisis)) {
+      setCrisisOpen(true);
+      setPendingContinue(payload);
+      return;
+    }
+
+    setLoading(true);
+    setProgressMsg("");
+    setVisionInsight(null);
+    try {
+      const data = await fetchRecommendations({
+        freeText, selectedMoods, birthYear,
+        continueAnyway: bypassCrisis, nonce, imageB64,
+        onProgress: (p) => {
+          if (!p) return;
+          if (p.step === "vision_insight" && p.insight) setVisionInsight(p.insight);
+          else if (p.msg) setProgressMsg(p.msg);
+        },
+      });
+      if (data.crisis && !bypassCrisis) {
+        setCrisisOpen(true);
+        setPendingContinue(payload);
+        setLoading(false);
+        return;
+      }
+      setResult(data);
+    } catch (err) {
+      console.error(err);
+      setError("The awe ether is unstable right now. Please try again in a moment.");
+    } finally {
+      setLoading(false);
+      setProgressMsg("");
+    }
+  };
+
+  const handleSurpriseMe = () => {
+    if (!lastPayload || loading) return;
+    const newNonce = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : String(Date.now()) + Math.random().toString(36).slice(2);
+    handleAnalyze(lastPayload, false, newNonce);
+  };
+
+  const handleReturnHome = () => {
+    setIsResearching(false);
+    setResult(null);
+    setError(null);
+    setVisionInsight(null);
+    setProgressMsg("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return (
+    <>
+      <style>{THEME_CSS}</style>
+      <div className={\`ami-root noise-overlay\${darkMode ? " ami-dark" : ""}\`}>
+        <Background active={!isResearching || result} dark={darkMode} />
+
+        {/* Navigation */}
+        <nav style={{
+          position: "fixed", top: 0, width: "100%", zIndex: 50,
+          padding: scrolled ? "1rem 1.5rem" : "1.5rem",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          transition: "all 0.5s",
+          background: scrolled ? (darkMode ? "rgba(10,14,39,0.9)" : "rgba(255,255,255,0.9)") : "transparent",
+          backdropFilter: scrolled ? "blur(12px)" : "none",
+          borderBottom: scrolled ? (darkMode ? "2px solid rgba(255,255,255,0.1)" : "2px solid rgba(0,0,0,0.1)") : "none",
+          boxShadow: scrolled ? "0 25px 50px -12px rgba(0,0,0,0.25)" : "none",
+        }}>
+          <motion.div
+            onClick={handleReturnHome}
+            style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+            animate={{ y: [0, -3, 0], rotate: [0.5, -0.5, 0.5] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <span className="storybook-title" style={{ fontSize: "3rem", letterSpacing: "-0.04em" }}>
+              <FloatingWords text="Ami." intensity={0.8} />
+            </span>
+          </motion.div>
+
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+            <motion.button
+              onClick={() => { setManualThemeOverride(true); setDarkMode((d) => !d); }}
+              aria-label={darkMode ? "Switch to day mode" : "Switch to night mode"}
+              title={darkMode ? "Switch to Day Mode" : "Switch to Night Mode"}
+              whileHover={{ scale: 1.1, rotate: 8, transition: { duration: 0.2 } }}
+              whileTap={{ scale: 0.92 }}
+              animate={{ y: [0, 3, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "9999px",
+                background: "transparent",
+                border: "2px solid color-mix(in srgb, var(--color-fun-ink) 10%, transparent)",
+                color: darkMode ? "var(--color-fun-yellow)" : "var(--color-fun-ink)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", flexShrink: 0,
+                transition: "background-color 0.2s ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--color-fun-ink) 5%, transparent)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              {darkMode ? <Sun size={20} fill="currentColor" /> : <Moon size={20} fill="currentColor" />}
+            </motion.button>
+
+            <motion.button
+              onClick={() => setIsResearching(true)}
+              animate={{ y: [0, -2, 0] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              whileHover={{ scale: 1.05, y: -3, transition: { duration: 0.2 } }}
+              whileTap={{ scale: 0.95 }}
+              style={{
+                padding: "0.5rem 1.5rem", borderRadius: "9999px",
+                background: "var(--color-fun-ink)",
+                color: "var(--color-fun-white)",
+                fontFamily: "var(--font-display)", fontWeight: 700,
+                fontSize: "0.875rem", letterSpacing: "0.1em",
+                border: "none", cursor: "pointer",
+              }}
+            >
+              <FloatingWords text="LAUNCH APP" intensity={0.5} />
+            </motion.button>
+          </div>
+        </nav>
+
+        <AnimatePresence mode="wait">
+          {!isResearching ? (
+            <motion.main
+              key="landing"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              style={{ position: "relative", zIndex: 10, paddingTop: "10rem", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}
+            >
+              {/* Hero */}
+              <section style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", marginBottom: "10rem" }}>
+                <AnimatePresence>
+                  {badgeVisible && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ y: 500, rotate: 45, opacity: 0, transition: { duration: 0.8, ease: "backIn" } }}
+                      style={{ marginBottom: "2rem" }}
+                    >
+                      <motion.div
+                        drag
+                        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                        dragElastic={0.1}
+                        onClick={() => setBadgeVisible(false)}
+                        animate={{ rotate: [2, -2, 2], y: [0, -8, 0] }}
+                        transition={{
+                          rotate: { duration: 4, repeat: Infinity, ease: "easeInOut" },
+                          y: { duration: 3.5, repeat: Infinity, ease: "easeInOut" },
+                        }}
+                        whileHover={{ rotateZ: -10, y: -12, scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        style={{
+                          display: "inline-block", padding: "0.5rem 1.5rem",
+                          background: "var(--color-fun-mint)", borderRadius: "9999px",
+                          border: "2px solid black", color: "black",
+                          fontFamily: "var(--font-display)", fontWeight: 700,
+                          fontSize: "0.75rem", marginBottom: "2rem", cursor: "pointer",
+                          userSelect: "none",
+                        }}
+                      >
+                        SCIENCE-BACKED RECOMMENDATIONS
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="storybook-title"
+                  style={{
+                    fontSize: "clamp(3.75rem, 12vw, 10rem)",
+                    lineHeight: 0.9, letterSpacing: "-0.02em",
+                    marginBottom: "2rem",
+                    filter: "drop-shadow(0 25px 25px rgba(0,0,0,0.15))",
+                  }}
+                >
+                  <FloatingWords text="Tell me" intensity={1} />
+                  <br />
+                  <FloatingWords text="how are you," style={{ color: "var(--color-fun-orange)", fontFamily: "var(--font-weird)", letterSpacing: "-0.05em" }} intensity={2.5} />
+                  <br />
+                  <FloatingWords text="I know what to" className="outline-white-on-dark" style={{ color: "white" }} intensity={1} />
+                  <br />
+                  <FloatingWords text="hand you." className="outline-white-on-dark" style={{ color: "white" }} intensity={1} />
+                </motion.h1>
+
+                <div style={{ maxWidth: "48rem", margin: "0 auto", marginBottom: "3rem" }}>
+                  <motion.p
+                    animate={{ y: [0, 5, 0] }}
+                    transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                    data-secondary-text
+                    style={{
+                      fontSize: "clamp(1.125rem, 2vw, 1.25rem)",
+                      fontFamily: "var(--font-body)",
+                      fontStyle: "italic",
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.6, marginBottom: "3rem",
+                    }}
+                  >
+                    <FloatingWords text="A movie, a book, a series, an anecdote from your childhood." intensity={0.4} />
+                    <br />
+                    <FloatingWords text="Recommendations chosen based on what you feel and what research says about" intensity={0.4} />{" "}
+                    <motion.span
+                      style={{ display: "inline-block", whiteSpace: "nowrap", cursor: "default", fontWeight: 700 }}
+                      animate={{
+                        y: [0, -4, 2, 0],
+                        rotate: [0, 0.5, -0.5, 0],
+                        color: ["var(--color-fun-pink)", "#ff8eb0", "var(--color-fun-pink)"],
+                      }}
+                      whileHover={{
+                        y: -15,
+                        rotate: (Math.random() - 0.5) * 15,
+                        zIndex: 10,
+                        transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 },
+                      }}
+                      whileTap={{ rotate: (Math.random() - 0.5) * 30 }}
+                      transition={{
+                        y: { duration: 12, repeat: Infinity, ease: "easeInOut" },
+                        rotate: { duration: 12, repeat: Infinity, ease: "easeInOut" },
+                        color: { duration: 4, repeat: Infinity },
+                      }}
+                    >
+                      nostalgia
+                    </motion.span>,{" "}
+                    <motion.span
+                      style={{ display: "inline-block", whiteSpace: "nowrap", cursor: "default", fontWeight: 700 }}
+                      animate={{
+                        y: [0, -4, 2, 0],
+                        rotate: [0, -0.5, 0.5, 0],
+                        color: ["var(--color-fun-mint)", "#98ff98", "var(--color-fun-mint)"],
+                      }}
+                      whileHover={{
+                        y: -15,
+                        rotate: (Math.random() - 0.5) * 15,
+                        zIndex: 10,
+                        transition: { duration: 0.2, type: "spring", stiffness: 400, damping: 10 },
+                      }}
+                      whileTap={{ rotate: (Math.random() - 0.5) * 30 }}
+                      transition={{
+                        y: { duration: 13, repeat: Infinity, ease: "easeInOut" },
+                        rotate: { duration: 13, repeat: Infinity, ease: "easeInOut" },
+                        color: { duration: 5, repeat: Infinity },
+                      }}
+                    >
+                      awe
+                    </motion.span>, <FloatingWords text="and the stories that repair us." intensity={0.4} />
+                  </motion.p>
+                  <motion.p
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    style={{ fontSize: "clamp(1rem, 2vw, 1.125rem)", fontFamily: "var(--font-sketch)", color: "var(--color-fun-pink)", fontWeight: 700, marginBottom: "1.5rem", textAlign: "center" }}
+                  >
+                    It may pop your bubble !
+                  </motion.p>
+
+                  <motion.div
+                    animate={{ y: [0, -10, 0], rotate: [0.5, -0.5, 0.5] }}
+                    transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <motion.button
+                      whileHover={{ scale: 1.05, rotate: -2, backgroundColor: "var(--color-fun-pink)" }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setIsResearching(true)}
+                      style={{
+                        marginBottom: "5rem", padding: "1.5rem 4rem",
+                        background: "var(--color-fun-ink)",
+                        color: "var(--color-fun-white)",
+                        borderRadius: "9999px", border: "none", cursor: "pointer",
+                        fontFamily: "var(--font-display)", fontWeight: 900,
+                        fontSize: "1.5rem", letterSpacing: "0.1em",
+                        boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+                        transition: "background-color 0.3s ease",
+                      }}
+                    >
+                      START NOW
+                    </motion.button>
+                  </motion.div>
+
+                  {/* Features */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1rem", marginBottom: "5rem" }}>
+                    {[
+                      { title: "Easy to use", desc: "Just your mood and a birth year" },
+                      { title: "Privacy-minded", desc: "Your mood stays with you" },
+                      { title: "Research-backed", desc: "Every reco is sourced" },
+                      { title: "Gemma 4 powered", desc: "via Google AI Studio" },
+                    ].map((item, i) => (
+                      <motion.div
+                        key={i}
+                        animate={{ y: [0, -10, 0], rotate: [1, -1, 1] }}
+                        transition={{ duration: 6 + i, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+                        whileHover={{ scale: 1.1, y: -20, zIndex: 20, backgroundColor: "rgba(255,255,255,0)" }}
+                        whileTap={{ scale: 0.95 }}
+                        className="sticker-shadow"
+                        data-surface="white"
+                        style={{
+                          padding: "1rem",
+                          background: "var(--color-fun-white)",
+                          border: "2px solid var(--color-fun-ink)",
+                          borderRadius: "1rem", transform: "rotate(1deg)",
+                          display: "flex", flexDirection: "column", justifyContent: "center",
+                          cursor: "default",
+                        }}
+                      >
+                        <span style={{ fontSize: "0.75rem", fontFamily: "var(--font-display)", fontWeight: 900, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "-0.04em", color: "var(--color-fun-pink)" }}>{item.title}</span>
+                        <span style={{ fontSize: "0.875rem", fontFamily: "var(--font-sketch)", lineHeight: 1.2 }}>{item.desc}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {/* Protocol */}
+                  <motion.div
+                    animate={{ y: [0, -15, 0], x: [0, 5, 0] }}
+                    transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+                    className="sticker-shadow"
+                    data-surface="white"
+                    style={{
+                      textAlign: "left", marginBottom: "5rem",
+                      padding: "3rem", background: "var(--color-fun-white)",
+                      border: "4px solid var(--color-fun-ink)", borderRadius: "3rem",
+                      position: "relative",
+                    }}
+                  >
+                    <h3 style={{ fontSize: "clamp(2rem, 5vw, 4rem)", fontFamily: "var(--font-display)", fontWeight: 900, marginBottom: "1.5rem", letterSpacing: "-0.02em" }}>
+                      <FloatingWords text="PROTOCOL" /> <br />
+                      <span style={{
+                        display: "inline-block",
+                        whiteSpace: "nowrap",
+                        color: "var(--color-fun-blue)",
+                        fontStyle: "italic",
+                        fontFamily: "var(--font-sketch)",
+                        WebkitTextStroke: darkMode ? "0px" : "1px black",
+                      }}>Simple. Human. Intuitive.</span>
+                    </h3>
+                    <p data-secondary-text style={{ fontSize: "clamp(1.125rem, 2vw, 1.25rem)", fontFamily: "var(--font-body)", fontStyle: "italic", color: "var(--text-secondary)", marginBottom: "3rem", lineHeight: 1.6 }}>
+                      <FloatingWords text="Most wellness apps ask you several questions and a subscription." intensity={0.4} /> <br />
+                      <FloatingWords text="Ami asks just two and they are forgotten when you close the app." intensity={0.4} />
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "2rem" }}>
+                      {[
+                        { num: "01", title: "Describe your mood", desc: "Type, speak, drop an image of a meme (yes, a meme!), a quote, a screenshot, Ami hears and sees you." },
+                        { num: "02", title: "Give your birth year", desc: "Ami uses it to target the nostalgia window (ages 8-16), where sensory memories are deepest." },
+                        { num: "03", title: "Ami hears or sees you", desc: "She decodes your emotion and selects a helpful mechanism from the research." },
+                        { num: "04", title: "Ami hands you 4 items", desc: "A film, a series, a novel, an anecdote, each sourced from peer-reviewed psychology." },
+                      ].map((step, i) => (
+                        <motion.div
+                          key={i}
+                          animate={{ y: [0, -5, 0] }}
+                          transition={{ duration: 4 + i, repeat: Infinity, ease: "easeInOut", delay: i * 0.5 }}
+                          style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}
+                        >
+                          <span data-step-num style={{ fontSize: "1.875rem", fontFamily: "var(--font-display)", fontWeight: 900, color: "var(--text-faint)" }}>{step.num}</span>
+                          <div>
+                            <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.25rem", marginBottom: "0.25rem" }}>
+                              <FloatingWords text={step.title} intensity={0.6} />
+                            </h4>
+                            <p data-secondary-text style={{ fontSize: "0.875rem", fontFamily: "var(--font-body)", color: "var(--text-secondary)", lineHeight: 1.6, fontWeight: 500 }}>
+                              <FloatingWords text={step.desc} intensity={0.3} />
+                            </p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+                </div>
+              </section>
+
+
+              {/* ── Mood mask gallery ──────────────────────────── */}
+              <MoodMaskGallery />
+
+              {/* ── Science section — Tuner ──────────────────────── */}
+              <section style={{ padding: "2rem 2rem 0", maxWidth: "900px", margin: "0 auto" }}>
+
+                <AnimatePresence>
+                  {showAllMechanisms && (
+                    <motion.div
+                      key="all-mech"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={(e) => { if (e.target === e.currentTarget) setShowAllMechanisms(false); }}
+                      style={{
+                        position: "fixed", inset: 0, zIndex: 9999,
+                        background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)",
+                        overflowY: "auto", padding: "2rem 1rem",
+                        display: "flex", flexDirection: "column", alignItems: "center",
+                        paddingTop: "5rem",
+                      }}
+                    >
+                      <motion.div
+                        initial={{ y: 60, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 60, opacity: 0 }}
+                        transition={{ type: "spring", stiffness: 280, damping: 28 }}
+                        style={{
+                          background: "var(--color-fun-white)",
+                          borderRadius: "2rem", padding: "3rem 2.5rem 2.5rem",
+                          maxWidth: "760px", width: "100%",
+                          border: "3px solid var(--color-fun-ink)",
+                          boxShadow: "0 0 0 4px var(--shadow-stroke), 10px 10px 0 0 var(--shadow-color)",
+                          position: "relative",
+                          marginBottom: "2rem",
+                        }}
+                      >
+                        <motion.button
+                          whileHover={{ scale: 1.1, rotate: 10 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => setShowAllMechanisms(false)}
+                          style={{
+                            position: "absolute", top: "1.25rem", right: "1.25rem",
+                            background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+                            border: "none", borderRadius: "9999px",
+                            width: "2.5rem", height: "2.5rem",
+                            fontSize: "1.1rem", cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontFamily: "var(--font-display)", fontWeight: 900,
+                          }}
+                        >×</motion.button>
+
+                        <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(1.6rem,4vw,2.2rem)", marginBottom: "0.4rem", letterSpacing: "-0.02em" }}>
+                          <FloatingWords text="11 psychological mechanisms" intensity={0.5} />
+                        </h2>
+                        <p style={{ color: "var(--text-secondary)", fontFamily: "var(--font-body)", marginBottom: "2.5rem", fontSize: "1rem", lineHeight: 1.6 }}>
+                          <FloatingWords text="Every recommendation Ami makes is rooted in one of these peer-reviewed frameworks." intensity={0.3} />
+                        </p>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                          {MECHS.map((m, i) => (
+                            <motion.div
+                              key={m.id}
+                              initial={{ opacity: 0, x: -16 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.045 }}
+                              whileHover={{ x: 6 }}
+                              style={{
+                                padding: "1.25rem 1.5rem",
+                                background: "var(--color-fun-white)",
+                                borderRadius: "1.25rem",
+                                border: "2px solid var(--color-fun-ink)",
+                                borderLeft: \`5px solid \${m.color}\`,
+                                boxShadow: \`4px 4px 0 0 \${m.color}\`,
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+                                <strong style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1.15rem" }}>
+                                  <FloatingWords text={m.label} intensity={0.4} />
+                                </strong>
+                                <span
+                                  className="ami-mech-tag"
+                                  style={{
+                                    fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.08em",
+                                    background: m.color, color: "#000", borderRadius: "9999px",
+                                    padding: "0.15rem 0.6rem", textTransform: "uppercase",
+                                    fontFamily: "var(--font-body)", flexShrink: 0,
+                                  }}>{m.label}</span>
+                              </div>
+                              <p style={{ fontFamily: "var(--font-body)", fontSize: "0.925rem", color: "var(--text-secondary)", lineHeight: 1.65, margin: "0 0 0.5rem" }}>
+                                <FloatingWords text={m.desc} intensity={0.2} />
+                              </p>
+                              <p style={{ fontSize: "0.72rem", fontFamily: "var(--font-body)", fontStyle: "italic", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                                {m.paper}
+                              </p>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 24 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                  style={{ textAlign: "center", marginBottom: "3rem" }}
+                >
+                  <h2 style={{
+                    fontFamily: "var(--font-display)", fontWeight: 900,
+                    fontSize: "clamp(2rem, 5vw, 4rem)", marginBottom: "1rem",
+                    letterSpacing: "-0.02em", lineHeight: 1.1,
+                    color: "var(--color-fun-ink)",
+                  }}>
+                    <FloatingWords text="The science behind your" intensity={0.5} />{" "}
+                    <motion.span
+                      animate={{ color: ["var(--color-fun-pink)", "var(--color-fun-mint)", "var(--color-fun-blue)", "var(--color-fun-pink)"] }}
+                      transition={{ duration: 7, repeat: Infinity }}
+                      style={{ display: "inline-block" }}
+                    >
+                      <FloatingWords text="feelings" intensity={0.5} />
+                    </motion.span>
+                  </h2>
+                  <motion.p
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                    style={{ fontFamily: "var(--font-body)", fontSize: "clamp(1.05rem,2vw,1.2rem)", color: darkMode ? "var(--text-secondary)" : "rgba(255,255,255,0.85)", maxWidth: "540px", margin: "0 auto", lineHeight: 1.7 }}
+                  >
+                    <FloatingWords text="Ami matches your state to one of 11 validated psychological mechanisms, each backed by peer-reviewed research." intensity={0.25} />
+                  </motion.p>
+                </motion.div>
+
+                <TunerDial mechs={MECHS} dark={darkMode} />
+
+                <motion.div
+                  style={{ textAlign: "center", marginTop: "5rem", marginBottom: "6rem" }}
+                  animate={{ y: [0, -6, 0], rotate: [0.3, -0.3, 0.3] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <motion.button
+                    whileHover={{ scale: 1.06, rotate: -2, backgroundColor: "var(--color-fun-mint)" }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowAllMechanisms(true)}
+                    className="sticker-shadow"
+                    style={{
+                      padding: "1rem 3rem",
+                      background: "var(--color-fun-yellow)",
+                      color: "#000000",
+                      border: "2px solid #000000",
+                      borderRadius: "9999px", cursor: "pointer",
+                      fontFamily: "var(--font-display)", fontWeight: 900,
+                      fontSize: "1.15rem", letterSpacing: "0.03em",
+                      transition: "background-color 0.2s ease",
+                    }}
+                  >
+                    <FloatingWords text="See all 11 mechanisms + papers" intensity={0.6} />
+                  </motion.button>
+                </motion.div>
+              </section>
+
+
+              {/* Footer */}
+              <footer style={{
+                padding: "6rem 2rem", background: "black", color: "white",
+                borderRadius: "4rem", marginBottom: "2.5rem",
+                overflow: "hidden", position: "relative", borderTop: "4px solid black",
+              }}>
+                <div style={{
+                  position: "absolute", top: 0, right: 0,
+                  width: "16rem", height: "16rem",
+                  background: "var(--color-fun-pink)", filter: "blur(120px)",
+                  opacity: 0.2, marginRight: "-5rem", marginTop: "-5rem",
+                }} />
+                <motion.div
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                  style={{
+                    maxWidth: "80rem", margin: "0 auto",
+                    display: "flex", flexDirection: "row", flexWrap: "wrap",
+                    justifyContent: "space-between", alignItems: "center",
+                    gap: "5rem", position: "relative", zIndex: 10,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: "300px" }}>
+                    <p style={{ fontSize: "clamp(1.875rem, 4vw, 3rem)", fontFamily: "var(--font-display)", fontWeight: 900, marginBottom: "1rem", lineHeight: 1.1 }}>
+                      <FloatingWords text="What you feel, someone has already" intensity={0.8} /> <br />
+                      <FloatingWords text="written," style={{ color: "var(--color-fun-pink)", fontStyle: "italic" }} intensity={0.8} />{" "}
+                      <FloatingWords text="filmed," style={{ color: "var(--color-fun-blue)", fontStyle: "italic" }} intensity={0.8} />{" "}
+                      <FloatingWords text="or" intensity={0.8} />{" "}
+                      <FloatingWords text="painted it." style={{ color: "var(--color-fun-orange)", fontStyle: "italic" }} intensity={0.8} />
+                    </p>
+                    <p style={{ fontSize: "1.5rem", fontFamily: "var(--font-sketch)", color: "rgba(255,255,255,0.7)", fontStyle: "italic" }}>
+                      <FloatingWords text="Ami just helps you find it again." intensity={0.5} />
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", alignItems: "flex-end" }}>
+                    <motion.button
+                      animate={{ y: [0, -8, 0], scale: [1, 1.05, 1] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                      onClick={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setIsResearching(true); }}
+                      whileHover={{ scale: 1.05, rotate: 2 }}
+                      className="sticker-shadow"
+                      style={{
+                        padding: "1.5rem 3rem", borderRadius: "9999px",
+                        background: "var(--color-fun-mint)", color: "black",
+                        fontFamily: "var(--font-display)", fontWeight: 900,
+                        fontSize: "1.5rem", border: "4px solid transparent",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <FloatingWords text="TRY IT" />
+                    </motion.button>
+                    <span style={{ fontSize: "0.875rem", fontFamily: "monospace", opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      <FloatingWords text="© 2026 AMI · Powered by Gemma 4" />
+                    </span>
+
+                  </div>
+                </motion.div>
+              </footer>
+              {/* ── Disclaimer ── */}
+<p style={{
+  textAlign: "center", fontFamily: "var(--font-body)",
+  fontSize: "0.65rem", fontStyle: "italic",
+  color: "var(--text-muted)", marginTop: "3rem",
+  paddingBottom: "2rem", lineHeight: 1.5,
+}}>
+  Ami does not assess mental health, nor provide clinical advice,
+  and is not a substitute for professional support.
+</p>
+            </motion.main>
+          ) : (
+            <motion.main
+              key="research"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              style={{ position: "relative", zIndex: 10, paddingTop: "10rem", paddingLeft: "1.5rem", paddingRight: "1.5rem", paddingBottom: "10rem" }}
+            >
+              <div style={{ maxWidth: "72rem", margin: "0 auto" }}>
+                <button
+                  onClick={handleReturnHome}
+                  style={{
+                    marginBottom: "3rem", display: "flex", alignItems: "center", gap: "0.5rem",
+                    color: "var(--text-secondary)", fontFamily: "var(--font-display)", fontWeight: 700,
+                    background: "transparent", border: "none", cursor: "pointer",
+                  }}
+                >
+                  ← <FloatingWords text="BACK TO HOME" />
+                </button>
+
+                <div style={{ marginBottom: "5rem" }}>
+                  <ResearchInput onAnalyze={handleAnalyze} isLoading={loading} />
+            {loading && progressMsg && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                style={{
+                  marginTop: '1.5rem', padding: '1rem 1.5rem',
+                  borderRadius: '1.5rem',
+                  background: 'var(--color-fun-white)',
+                  border: '3px solid var(--color-fun-ink)',
+                  boxShadow: '0 0 0 3px var(--shadow-stroke), 4px 4px 0 0 var(--shadow-color)',
+                  fontFamily: 'var(--font-display)', fontWeight: 700,
+                  fontSize: '1.1rem', textAlign: 'center',
+                }}
+              >
+                ✨ {progressMsg}
+              </motion.div>
+            )}
+            {visionInsight && (
+              <motion.div
+                ref={visionInsightRef}
+                className="vision-insight-card"
+                initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                animate={{ opacity: 1, y: [0, -8, 0], scale: 1, rotate: [0, 0.4, -0.4, 0] }}
+                transition={{
+                  opacity: { duration: 0.4 },
+                  scale: { duration: 0.4 },
+                  y: { duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.4 },
+                  rotate: { duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.4 },
+                }}
+                whileHover={{
+                  y: -16,
+                  rotate: 1,
+                  scale: 1.01,
+                  transition: { duration: 0.25, type: "spring", stiffness: 300, damping: 18 },
+                }}
+                whileTap={{ scale: 0.98, rotate: (Math.random() - 0.5) * 4 }}
+                style={{
+                  marginTop: "2.5rem", padding: "2.25rem 2.5rem",
+                  borderRadius: "2rem",
+                  background: "var(--color-fun-white)",
+                  border: "4px solid var(--color-fun-ink)",
+                  boxShadow: "0 0 0 4px var(--shadow-stroke), 12px 12px 0 0 var(--shadow-color)",
+                  fontFamily: "var(--font-display)",
+                  position: "relative",
+                  cursor: "default",
+                }}
+              >
+                {/* "First reading" badge — floats on its own */}
+                <motion.div
+                  animate={{ y: [0, -4, 0], rotate: [-1, 1, -1] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                  whileTap={{ scale: 0.95, rotate: (Math.random() - 0.5) * 12 }}
+                  style={{
+                    position: "absolute", top: "-1rem", left: "2rem",
+                    padding: "0.3rem 1rem", borderRadius: "9999px",
+                    background: "var(--color-fun-ink)",
+                    color: "var(--color-fun-white)",
+                    fontSize: "0.62rem", fontWeight: 800,
+                    letterSpacing: "0.28em", textTransform: "uppercase",
+                  }}>
+                  First reading
+                </motion.div>
+                {/* Input type label — floats */}
+                <motion.div
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    fontSize: "0.9rem", fontWeight: 800,
+                    letterSpacing: "0.1em", textTransform: "uppercase",
+                    color: "var(--color-fun-pink)", marginBottom: "0.65rem",
+                  }}>
+                  {visionInsight.input_type === "image+text"
+                    ? "👁️ Ami sees you and heard you"
+                    : visionInsight.input_type === "text"
+                    ? "👂 Ami heard you"
+                    : "👁️ Ami sees you"}
+                </motion.div>
+                {/* Main understanding text — uses FloatingWords */}
+                <div
+                  className="vision-insight-understanding"
+                  style={{
+                  fontSize: "clamp(1.4rem, 2.6vw, 1.9rem)",
+                  fontWeight: 800, lineHeight: 1.25,
+                  marginBottom: "0.85rem",
+                  color: "var(--color-fun-ink)",
+                }}>
+                  "<FloatingWords text={visionInsight.understanding || visionInsight.image_read || visionInsight.decoder_note || ""} intensity={0.6} />"
+                </div>
+                {visionInsight.quote_author && (
+                  <motion.div
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 0.6 }}
+                    style={{
+                      fontSize: "0.95rem", fontWeight: 700,
+                      color: "var(--text-muted)",
+                      marginBottom: "0.5rem",
+                    }}>
+                    — recognised as {visionInsight.quote_author}
+                  </motion.div>
+                )}
+                {/* Tags row — each tag floats independently */}
+                <div style={{
+                  display: "flex", flexWrap: "wrap", gap: "0.5rem",
+                  marginTop: "1rem", alignItems: "center",
+                }}>
+                  <motion.span
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                    whileHover={{ y: -5, transition: { duration: 0.3 } }}
+                    style={{
+                      padding: "0.4rem 1rem", borderRadius: "9999px",
+                      background: "var(--color-fun-mint)",
+                      border: "2px solid var(--color-fun-ink)",
+                      fontSize: "0.95rem", fontWeight: 800,
+                      display: "inline-block", cursor: "default",
+                    }}
+                    className="vision-tag">
+                    {visionInsight.emotion_core}
+                  </motion.span>
+                  {(visionInsight.active_moods || []).slice(0, 3).map((m, mi) => (
+                    <motion.span
+                      key={m}
+                      animate={{ y: [0, -3, 0] }}
+                      transition={{ duration: 6.5 + mi * 0.5, repeat: Infinity, ease: "easeInOut", delay: mi * 0.4 }}
+                      whileHover={{ y: -5, transition: { duration: 0.3 } }}
+                      style={{
+                        padding: "0.35rem 0.85rem", borderRadius: "9999px",
+                        background: "var(--color-fun-pink)",
+                        border: "2px solid var(--color-fun-ink)",
+                        fontSize: "0.85rem", fontWeight: 700,
+                        display: "inline-block", cursor: "default",
+                      }}
+                      className="vision-tag">
+                      {m}
+                    </motion.span>
+                  ))}
+                </div>
+                {visionInsight.decoder_note && visionInsight.input_type !== "text" && (
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 8, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    style={{
+                      marginTop: "1rem", fontSize: "0.95rem",
+                      fontStyle: "italic", color: "var(--text-secondary)",
+                    }}>
+                    {visionInsight.decoder_note}
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+                </div>
+
+                {error && (
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{
+                    marginTop: "2rem", color: "var(--color-fun-ink)",
+                    background: "var(--color-fun-pink)", padding: "1rem",
+                    borderRadius: "1rem", border: "2px solid var(--color-fun-ink)", fontWeight: 700,
+                  }}>
+                    {error}
+                  </motion.p>
+                )}
+
+                <AnimatePresence>
+                  {result && (
+                    <motion.section
+                      initial={{ opacity: 0, y: 50 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      style={{ marginTop: "5rem" }}
+                    >
+                      <h1
+                        ref={resultsRef}
+                        className="storybook-title"
+                        style={{
+                          fontSize: "clamp(3rem, 8vw, 6rem)",
+                          lineHeight: 1.05,
+                          marginBottom: "5rem",
+                          textAlign: "left",
+                          scrollMarginTop: "10rem",
+                          letterSpacing: "-0.02em",
+                          filter: "drop-shadow(0 25px 25px rgba(0,0,0,0.15))",
+                        }}
+                      >
+                        <FloatingWords text="And here is" intensity={0.8} />
+                        <br />
+                        <FloatingWords text="what she" style={{ color: "var(--color-fun-pink)" }} intensity={1.2} />
+                        {" "}
+                        <FloatingWords text="hands you." style={{ color: "var(--color-fun-blue)" }} intensity={1.2} />
+                      </h1>
+
+                      <MagazineView
+                        result={result}
+                        currentMood={currentMood}
+                        loading={loading}
+                        onSurpriseMe={handleSurpriseMe}
+                        onReturn={handleReturnHome}
+                      />
+                    </motion.section>
+                  )}
+                </AnimatePresence>
+              {/* ── Disclaimer ── */}
+<p style={{
+  textAlign: "center", fontFamily: "var(--font-body)",
+  fontSize: "0.65rem", fontStyle: "italic",
+  color: "var(--text-muted)", marginTop: "3rem",
+  paddingBottom: "2rem", lineHeight: 1.5,
+}}>
+  Ami does not assess mental health, nor provide clinical advice,
+  and is not a substitute for professional support.
+</p>
+              </div>
+            </motion.main>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {crisisOpen && (
+            <CrisisPanel
+              onClose={() => { setCrisisOpen(false); setPendingContinue(null); }}
+              onContinue={() => {
+                setCrisisOpen(false);
+                if (pendingContinue) {
+                  handleAnalyze(pendingContinue, true);
+                  setPendingContinue(null);
+                }
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {detailsPayload && (
+            <DetailsModal
+              payload={detailsPayload}
+              onClose={() => setDetailsPayload(null)}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {thesisOpen && result && (
+            <ThesisModal
+              thesis={result.thesis}
+              thematicChart={result.thematicChart}
+              currentMood={currentMood}
+              onClose={() => setThesisOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+
+
+    </>
+  );
+}
+`;
+
+    const jsCode = Babel.transform(jsxSource, { presets: ['react'] }).code;
+
+    const moduleFactory = new Function(
+      'React', 'useState', 'useEffect', 'useMemo',
+      'motion', 'AnimatePresence',
+      'Sparkles', 'Quote', 'Star', 'Loader2', 'Video', 'Tv', 'Book',
+      'Heart', 'Phone', 'X', 'ArrowUpRight', 'Sun', 'Moon',
+      'Mic', 'MicOff', 'ImagePlus',
+      'ChevronLeft', 'ChevronRight',
+      'AreaChart', 'Area', 'ResponsiveContainer',
+      'HTMLFlipBook',
+      jsCode + '; return Ami;'
+    );
+
+    const Ami = moduleFactory(
+      React, useState, useEffect, useMemo,
+      motion, AnimatePresence,
+      Sparkles, Quote, Star, Loader2, Video, Tv, Book,
+      Heart, Phone, X, ArrowUpRight, Sun, Moon,
+      Mic, MicOff, ImagePlus,
+      ChevronLeft, ChevronRight,
+      AreaChart, Area, ResponsiveContainer,
+      HTMLFlipBook
+    );
+
+    const root = ReactDOMClient.createRoot(document.getElementById('root'));
+    root.render(React.createElement(Ami));
+    console.log('✅ Ami mounted (single React instance via import map)');
+  </script>
+</body>
+</html>
