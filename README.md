@@ -1,4 +1,4 @@
-# Ami
+# Ami or the end of doomscrolling
 
 **Recommendation based on preferences can trap us in our own biases (Nguyen et al., 2014). Recommendation based on research could liberate us. That is Ami's principle.**
 
