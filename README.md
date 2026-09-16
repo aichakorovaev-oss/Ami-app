@@ -266,7 +266,7 @@ At least one of `free_text`, `selected_moods`, or `image_b64` is required.
 
 ## Limitations and Next Steps
 
-- Enough tests to ensure that the recommendations are always age and tone appropriate and nothing else unsafe to signal.
+- Enough tests to ensure that the recommendations are always age and tone appropriate with no hallucinations and nothing else unsafe to signal.
 - An agentic version was tried (see [Engineering Deep Dive](#engineering-deep-dive)). It worked well but roughly doubled response time, which is why the shipped demo defaults to the classic mode.
 - The app is currently English-only. It could be extended to more languages and to more items from different countries, for a more diverse catalogue.
 - A larger catalogue to ensure sufficient coverage for every mechanism and mood as well as more diverse recommendations.
