@@ -5,12 +5,14 @@ Port 7860 requis par HF Spaces Docker.
 
 """
 
-import os, re, json, time, random, hashlib, traceback
+import os, re, json, time, random, hashlib, traceback, uuid
+from contextlib import nullcontext
 from collections import deque
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 import httpx
+from huggingface_hub import CommitScheduler
 
 app = Flask(__name__, static_folder="static")
 CORS(app)
@@ -18,6 +20,49 @@ CORS(app)
 MODEL         = "gemma-4-26b-a4b-it"
 AI_STUDIO_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 DATA_DIR      = Path(__file__).parent / "data"
+
+# ── User feedback / reports persistence ─────────────────────────────────
+# HF Spaces' local disk is EPHEMERAL by default — anything written here is
+# wiped on the next restart/redeploy. Rather than pay for Persistent
+# Storage, we use the official CommitScheduler pattern: write locally to a
+# small JSONL file, and it gets pushed as a commit to a private HF Dataset
+# every few minutes. Free, versioned, survives restarts.
+#
+# Setup required (see README): create a private dataset repo (e.g.
+# "yourusername/ami-feedback") and set two Space secrets:
+#   FEEDBACK_DATASET_REPO = "yourusername/ami-feedback"
+#   HF_TOKEN              = <a token with WRITE access to that repo>
+FEEDBACK_DIR      = Path("feedback_data")
+FEEDBACK_DIR.mkdir(exist_ok=True)
+REPORTS_FILE      = FEEDBACK_DIR / "reports.jsonl"
+APP_FEEDBACK_FILE = FEEDBACK_DIR / "app_feedback.jsonl"
+
+_feedback_repo = os.environ.get("FEEDBACK_DATASET_REPO", "")
+if _feedback_repo and os.environ.get("HF_TOKEN"):
+    _scheduler = CommitScheduler(
+        repo_id=_feedback_repo,
+        repo_type="dataset",
+        folder_path=FEEDBACK_DIR,
+        path_in_repo="data",
+        every=5,  # minutes between pushes to the Hub
+    )
+else:
+    _scheduler = None
+    print("[feedback] WARNING: FEEDBACK_DATASET_REPO and/or HF_TOKEN not set — "
+          "feedback/reports are only written to the local (ephemeral) disk and "
+          "WILL BE LOST on the next Space restart. Set both secrets to persist them.",
+          flush=True)
+
+def _append_feedback(path: Path, entry: dict) -> str:
+    """Append one JSON line, thread-safe with the scheduler's own lock so a
+    background push never reads a half-written line."""
+    entry_id = str(uuid.uuid4())
+    record = {"id": entry_id, "ts": time.time(), **entry}
+    lock = _scheduler.lock if _scheduler else nullcontext()
+    with lock:
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return entry_id
 
 # ── Gemma calls ───────────────────────────────────────────────────────
 def _api_key():
@@ -35,7 +80,25 @@ def _post(payload: dict) -> dict:
 
 def _parse(response: dict) -> str:
     parts = response.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    # NOTE: Gemma 4 (26B-A4B / 31B) can silently emit an internal "thought"
+    # channel (parts marked thought=true) even when thinking was never
+    # requested — Google's own model card admits larger Gemma 4 models "may
+    # occasionally generate a thought channel even when thinking mode is
+    # explicitly turned off". We filter those out on purpose (we only want
+    # the visible answer), but if ALL output tokens get spent on that hidden
+    # channel before the real answer starts, `text` below ends up empty and
+    # every downstream extract_json() call fails with zero exception raised
+    # anywhere — this used to fail completely silently (no console error).
+    # The block below just makes that failure mode visible in the logs.
     text = next((p.get("text","") for p in parts if p.get("text") and not p.get("thought")), "")
+    if not text and parts:
+        usage = response.get("usageMetadata", {})
+        finish_reason = response.get("candidates", [{}])[0].get("finishReason")
+        print(f"[gemma] WARNING: empty visible text in response "
+              f"(thoughtsTokenCount={usage.get('thoughtsTokenCount')}, "
+              f"candidatesTokenCount={usage.get('candidatesTokenCount')}, "
+              f"finishReason={finish_reason}) — likely the whole maxOutputTokens "
+              f"budget was consumed by Gemma's hidden thinking channel.", flush=True)
     text = re.sub(r"^```json\s*", "", text.strip())
     text = re.sub(r"```\s*$", "", text).strip()
     return text
@@ -49,6 +112,15 @@ def gemma_call(prompt: str, max_tokens=400, temperature=0.75,
         "temperature":     min(temperature, 1.0),
         "topP":            0.95,
         "topK":            64,
+        # Force the lowest thinking level explicitly. Per Google's own docs,
+        # thinking is only supposed to be OFF by default and "high" is the
+        # opt-in switch — but larger Gemma 4 models (26B-A4B, 31B) are known
+        # to spontaneously open a hidden thinking channel anyway, and
+        # `thinkingConfig.includeThoughts: false` has been reported to be
+        # silently ignored on these two models. Setting `thinkingLevel` to
+        # "MINIMAL" explicitly is the workaround that has been confirmed to
+        # actually suppress it (unlike includeThoughts:false).
+        "thinkingConfig":  {"thinkingLevel": "MINIMAL"},
     }
     if sys_instr:
         payload_with_sys = {
@@ -70,7 +142,24 @@ def gemma_call(prompt: str, max_tokens=400, temperature=0.75,
     }
     return _parse(_post(payload))
 
-def gemma_vision_call(image_b64: str, prompt: str, max_tokens=300, temperature=0.6) -> str:
+def gemma_vision_call(image_b64: str, prompt: str, max_tokens=900, temperature=0.6) -> str:
+    # ── Why this changed (regression fix) ──────────────────────────────
+    # Symptom was: every image came back as "(image received, could not
+    # decode)" with no exception and nothing in the console. Root cause:
+    # gemma-4-26b-a4b-it can open an internal "thought" channel even though
+    # thinking was never requested here (Google's own model card explicitly
+    # warns larger Gemma 4 models "may occasionally generate a thought
+    # channel even when thinking mode is explicitly turned off"). Those
+    # thought tokens are billed against the SAME maxOutputTokens budget as
+    # the real answer. With the old budget (300) the hidden channel could
+    # eat the whole thing, leaving zero tokens for the actual JSON answer →
+    # _parse() returned "" → extract_json() found nothing → silent fallback.
+    # Two changes fix this:
+    #   1. thinkingConfig.thinkingLevel="MINIMAL" — reported to reliably
+    #      suppress the hidden channel, unlike includeThoughts:false which
+    #      is known to be silently ignored on this model.
+    #   2. max_tokens raised 300 → 900 as a safety net, in case the model
+    #      still opens a (now much shorter) thought channel despite (1).
     mime = "image/jpeg"
     raw  = image_b64
     if "," in image_b64 and image_b64.startswith("data:"):
@@ -88,6 +177,7 @@ def gemma_vision_call(image_b64: str, prompt: str, max_tokens=300, temperature=0
             "temperature": min(temperature, 1.0),
             "topP": 0.95,
             "topK": 64,
+            "thinkingConfig": {"thinkingLevel": "MINIMAL"},
         },
     }))
 
@@ -211,7 +301,14 @@ CRISIS_RESPONSE = {
 def crisis_payload():
     return CRISIS_RESPONSE
 
-def classify_safety(text, moods):
+def classify_safety(text, moods, image_distress=False):
+    # An image-level distress signal (see PSYCHOLOGIST_MULTIMODAL_PROMPT's
+    # "distress_signal" field) is treated exactly like a text-regex crisis
+    # hit: same "crisis" level, same downstream crisis_payload(), same
+    # continue_anyway bypass. This is deliberate — we want ONE crisis path,
+    # not a second parallel one that's easy to forget to wire up correctly.
+    if image_distress:
+        return {"level": "crisis", "method": "vision"}
     if any(re.search(p, text, re.I) for p in CRISIS_RE):
         return {"level": "crisis", "method": "regex"}
     severe = {"grieving","self_disgust","self_angry","ashamed","guilty","meaningless"}
@@ -286,9 +383,11 @@ Return a JSON with:
 - "surprise_ok": true if open to counter-intuitive picks
 - "include_anecdote": true if a historical anecdote would help; false if dissonant
 - "decoder_note": one sentence (max 15 words) reflecting what you understood — address the person as "you" with warmth, never say "user". Mention author if visible.
+- "distress_signal": true if the IMAGE ITSELF shows signs the person may be in crisis or at risk of self-harm, even if the accompanying text says nothing alarming — e.g. visible self-harm injuries, imagery of a method of self-harm, a note/message expressing suicidal intent, or explicit crisis language overlaid on the image. Be generous: if unsure, set true. This is never about sad or heavy content — only genuine risk signals.
+- "harmful_or_hateful_content": true if the image genuinely harms a real person, or is hateful toward a group — specifically: (a) any sexual or sexualized depiction of someone who is, or appears to be, a minor; (b) non-consensual intimate/sexual imagery of a real person; (c) real violence, death, or suffering presented exploitatively about an identifiable real victim, living or deceased; (d) content clearly meant to harass, dox, mock, ridicule, or degrade a specific real, identifiable individual; or (e) racist imagery, hate symbols, or other content demeaning a race, ethnicity, religion, or similar group. This app deliberately does NOT moderate content merely for being dark, sad, sexual (between consenting adults, not depicted non-consensually), violent, or intense in a fictional/artistic/generic way — that remains a valid emotional signal here. Only flag content that genuinely harms a real person, or is hateful toward a group.
 
 Respond ONLY with valid JSON, no backticks:
-{{"image_read":"...","is_meme":false,"is_quote":false,"quote_author":null,"emotion_core":"...","primary_mechanism":"...","secondary_mechanism":"...","active_moods":[...],"intensity":"...","nostalgia_relevant":false,"nostalgia_decade":null,"humour_relevant":false,"humour_word":null,"surprise_ok":false,"include_anecdote":true,"decoder_note":"..."}}
+{{"image_read":"...","is_meme":false,"is_quote":false,"quote_author":null,"emotion_core":"...","primary_mechanism":"...","secondary_mechanism":"...","active_moods":[...],"intensity":"...","nostalgia_relevant":false,"nostalgia_decade":null,"humour_relevant":false,"humour_word":null,"surprise_ok":false,"include_anecdote":true,"decoder_note":"...","distress_signal":false,"harmful_or_hateful_content":false}}
 """.strip()
 
 
@@ -309,6 +408,8 @@ def _fallback(selected_moods):
         "surprise_ok":         False,
         "include_anecdote":    True,
         "decoder_note":        "I sensed something difficult. Here are works that may help.",
+        "distress_signal":     False,
+        "harmful_or_hateful_content": False,
     }
 
 def run_psychologist(free_text, selected_moods, birth_year, mechanism_block, mood_list_str, papers=None, sys_instr=None):
@@ -339,7 +440,10 @@ def run_psychologist_multimodal(free_text, selected_moods, birth_year, image_b64
         mechanism_block = mechanism_block,
         mood_list       = mood_list_str,
     )
-    raw = gemma_vision_call(image_b64, prompt, max_tokens=200, temperature=0.65)
+    # max_tokens raised from 200: this call explicitly overrode the function's
+    # default, which would have silently defeated the fix above (see
+    # gemma_vision_call's docstring/comments for why this budget matters).
+    raw = gemma_vision_call(image_b64, prompt, max_tokens=900, temperature=0.65)
     data = extract_json(raw)
     if not data:
         fb = _fallback(selected_moods)
@@ -356,6 +460,11 @@ def run_psychologist_multimodal(free_text, selected_moods, birth_year, image_b64
     data.setdefault("humour_word",         None)
     data.setdefault("surprise_ok",         False)
     data.setdefault("decoder_note",        "")
+    # Safe-by-default: if the model omits these fields, we neither block
+    # nor escalate — see classify_safety() / the /api/recommend endpoint
+    # for how they're actually enforced.
+    data.setdefault("distress_signal",       False)
+    data.setdefault("harmful_or_hateful_content", False)
     return data
 
 # ── Librarian ─────────────────────────────────────────────────────────
@@ -770,6 +879,74 @@ def static_files(filename):
 def health():
     return jsonify({"status":"ok","model":MODEL})
 
+# ── Report an inappropriate recommendation ──────────────────────────────
+REPORT_REASONS = {"triggering", "mismatched", "other"}
+
+@app.route("/api/report", methods=["POST", "OPTIONS"])
+def api_report():
+    if request.method == "OPTIONS":
+        return "", 204
+    body   = request.get_json(silent=True) or {}
+    reason = body.get("reason_category")
+    if reason not in REPORT_REASONS:
+        return jsonify({"error": f"reason_category must be one of {sorted(REPORT_REASONS)}"}), 400
+    entry_id = _append_feedback(REPORTS_FILE, {
+        "type":            "report",
+        "item_id":         body.get("item_id"),
+        "item_title":      body.get("item_title"),
+        "mechanism":       body.get("mechanism"),
+        "moods":           body.get("moods") or [],
+        "reason_category": reason,
+        "reason_text":     (body.get("reason_text") or "").strip()[:1000],
+        "nonce":           body.get("nonce"),
+    })
+    return jsonify({"ok": True, "id": entry_id})
+
+# ── General app-usage feedback (not tied to one recommendation) ────────
+WATCHED_STATUSES = {"watched", "planning", "no"}
+
+def _bool_or_none(v):
+    return v if isinstance(v, bool) else None
+
+@app.route("/api/feedback", methods=["POST", "OPTIONS"])
+def api_feedback():
+    if request.method == "OPTIONS":
+        return "", 204
+    body           = request.get_json(silent=True) or {}
+    rating         = body.get("rating")
+    comment        = (body.get("comment") or "").strip()[:2000]
+    watched_status = body.get("watched_status")
+    helped         = _bool_or_none(body.get("helped_feel_better"))
+    surprised      = _bool_or_none(body.get("surprised"))
+    would_recommend = _bool_or_none(body.get("would_recommend"))
+    why_not        = (body.get("why_not") or "").strip()[:1000]
+
+    if rating is not None and (not isinstance(rating, int) or not (1 <= rating <= 5)):
+        return jsonify({"error": "rating must be an integer from 1 to 5"}), 400
+    if watched_status is not None and watched_status not in WATCHED_STATUSES:
+        return jsonify({"error": f"watched_status must be one of {sorted(WATCHED_STATUSES)}"}), 400
+    has_any = any([
+        rating, comment, watched_status, helped is not None,
+        surprised is not None, would_recommend is not None,
+    ])
+    if not has_any:
+        return jsonify({"error": "provide at least one answer"}), 400
+
+    entry_id = _append_feedback(APP_FEEDBACK_FILE, {
+        "type":              "app_feedback",
+        "rating":            rating,
+        "watched_status":    watched_status,
+        "helped_feel_better": helped,
+        "surprised":         surprised,
+        "would_recommend":   would_recommend,
+        "why_not":           why_not,
+        "comment":           comment,
+        "last_mechanism":    body.get("last_mechanism"),
+        "last_moods":        body.get("last_moods") or [],
+        "nonce":             body.get("nonce"),
+    })
+    return jsonify({"ok": True, "id": entry_id})
+
 @app.route("/api/recommend", methods=["POST","OPTIONS"])
 def recommend():
     if request.method == "OPTIONS":
@@ -849,11 +1026,43 @@ def recommend():
 
             # ── Step 2 · Safety ───────────────────────────────────────
             yield sse("status", {"step":"safety", "msg":"Checking safety signals...", "elapsed":round(time.time()-t0_total,1)})
-            safety = classify_safety(enriched_text, selected_moods)
-
+            # If an image was analyzed, its own distress_signal (set by
+            # run_psychologist_multimodal / the vision model) now feeds into
+            # the exact same crisis classification as the text regexes —
+            # so an alarming image triggers the crisis flow even when the
+            # free text says nothing worrying.
+            image_distress = bool(psych_profile and psych_profile.get("distress_signal"))
+            safety = classify_safety(enriched_text, selected_moods, image_distress=image_distress)
 
             if safety["level"] == "crisis" and not bypass_safety:
                 yield sse("crisis", {**crisis_payload(), "safety": safety})
+                return
+
+            # ── Step 2b · Real-person-harm / hateful-content block ────
+            # Deliberately narrow: this app does NOT gate on content being
+            # dark, sexual, violent, or intense in a fictional/generic
+            # sense — that's a legitimate emotional signal. It only blocks
+            # when a real, identifiable person is genuinely harmed by the
+            # image (minors in a sexual context, non-consensual intimate
+            # imagery, exploited real violence/death of an identifiable
+            # victim, targeted harassment/mockery), OR when the image is
+            # hateful toward a group (e.g. racist imagery/hate symbols).
+            # See PSYCHOLOGIST_MULTIMODAL_PROMPT's "harmful_or_hateful_
+            # content" field for the exact criteria. Never bypassable via
+            # continue_anyway.
+            #
+            # NOTE (minors specifically): do not treat "no recommendation
+            # generated" as a sufficient response for that sub-case on its
+            # own — many jurisdictions impose mandatory reporting duties in
+            # that situation. Get legal advice, and consider a dedicated
+            # hash-matching service (PhotoDNA / Google CSAI Match / Thorn)
+            # rather than relying solely on the vision model's own judgment.
+            if psych_profile and psych_profile.get("harmful_or_hateful_content") and not psych_profile.get("distress_signal"):
+                yield sse("blocked", {
+                    "blocked": True,
+                    "reason":  "harmful_or_hateful_content",
+                    "message": "This image isn't something we can build a recommendation around. If you're going through something difficult, we're here to help.",
+                })
                 return
 
             # ── Step 3 · Text-only psychologist ───────────────────────
@@ -964,6 +1173,7 @@ def recommend():
                     "intensity":         psych_profile.get("intensity"),
                     "surprise_ok":       psych_profile.get("surprise_ok"),
                     "tone":              psych_profile.get("tone","warm"),
+                    "active_moods":      psych_profile.get("active_moods", []),
                 },
                 "image_summary":  image_summary,
                 "enriched_text":  enriched_text,
