@@ -6,6 +6,13 @@
   <title>Ami</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html {
+      /* The page-flip animation briefly changes document height, which can
+         toggle the vertical scrollbar on/off and shift the whole page
+         sideways. Reserving the gutter permanently prevents that jump. */
+      overflow-y: scroll;
+      scrollbar-gutter: stable;
+    }
     body { background: #38BDF8; }
     #root { min-height: 100vh; }
     #loading {
@@ -55,7 +62,7 @@
       Sparkles, Quote, Star, Loader2, Video, Tv, Book,
       Heart, Phone, X, ArrowUpRight, Sun, Moon,
       Mic, MicOff, ImagePlus,
-      ChevronLeft, ChevronRight
+      ChevronLeft, ChevronRight, Flag, MessageCircle
     } = Lucide;
 
     const { motion, AnimatePresence } = FM;
@@ -1598,6 +1605,11 @@ function MagazineView({ result, currentMood, onSurpriseMe, onReturn, loading }) 
 
   const [spread, setSpread] = useState(0);
   const [detailsOpenFor, setDetailsOpenFor] = useState(null);
+  const [reportOpenFor, setReportOpenFor] = useState(null);
+  const [reportedIdx, setReportedIdx] = useState(() => new Set());
+  const sessionIdRef = React.useRef(
+    (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random())
+  );
   const bookRef = React.useRef(null);
 
   const THEMES = [
@@ -1946,28 +1958,53 @@ function MagazineView({ result, currentMood, onSurpriseMe, onReturn, loading }) 
           display: "flex", justifyContent: "space-between", alignItems: "center",
           gap: "0.75rem",
         }}>
-          {url ? (
-            <motion.a
-              href={url} target="_blank" rel="noopener noreferrer"
-              whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            {url ? (
+              <motion.a
+                href={url} target="_blank" rel="noopener noreferrer"
+                whileHover={{ y: -2, scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                  padding: "0.65rem 1.25rem",
+                  background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+                  fontFamily: "var(--font-display)", fontWeight: 900,
+                  fontSize: "0.85rem", letterSpacing: "0.08em", textTransform: "uppercase",
+                  borderRadius: "9999px", textDecoration: "none",
+                  boxShadow: "0 4px 0 0 " + theme.hex,
+                }}
+              >Let's go <ArrowUpRight size={14} /></motion.a>
+            ) : (
+              <span style={{
+                fontFamily: "var(--font-sketch)", fontSize: "1rem",
+                color: "var(--text-muted)", fontStyle: "italic",
+              }}>a memory to carry with you</span>
+            )}
+            <button
+              type="button"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setReportOpenFor(recIdx); }}
+              aria-label="Report this recommendation"
+              title="Report this recommendation"
+              disabled={reportedIdx.has(recIdx)}
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                padding: "0.65rem 1.25rem",
-                background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
-                fontFamily: "var(--font-display)", fontWeight: 900,
-                fontSize: "0.85rem", letterSpacing: "0.08em", textTransform: "uppercase",
-                borderRadius: "9999px", textDecoration: "none",
-                boxShadow: "0 4px 0 0 " + theme.hex,
+                display: "flex", alignItems: "center", gap: "0.4rem",
+                padding: "0.5rem 0.9rem", borderRadius: "9999px",
+                background: "transparent",
+                color: reportedIdx.has(recIdx) ? "var(--color-fun-orange)" : "var(--text-faint)",
+                border: "2px solid var(--border-subtle)",
+                cursor: reportedIdx.has(recIdx) ? "default" : "pointer",
+                fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "0.75rem",
+                flexShrink: 0,
               }}
-            >Let's go <ArrowUpRight size={14} /></motion.a>
-          ) : (
-            <span style={{
-              fontFamily: "var(--font-sketch)", fontSize: "1rem",
-              color: "var(--text-muted)", fontStyle: "italic",
-            }}>a memory to carry with you</span>
-          )}
+            >
+              <Flag size={13} fill={reportedIdx.has(recIdx) ? "currentColor" : "none"} />
+              Report
+            </button>
+          </div>
           <span style={{
             fontFamily: "var(--font-display)", fontWeight: 900,
             fontSize: "1.6rem", letterSpacing: "-0.04em",
@@ -2093,6 +2130,29 @@ function MagazineView({ result, currentMood, onSurpriseMe, onReturn, loading }) 
               color: "rgba(0,0,0,0.45)",
             }}>Why this · for you</span>
             <MechanismPill mechanismId="nostalgia" color={undefined} />
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setReportOpenFor(recIdx); }}
+              aria-label="Report this recommendation"
+              title="Report this recommendation"
+              disabled={reportedIdx.has(recIdx)}
+              style={{
+                display: "flex", alignItems: "center", gap: "0.4rem",
+                padding: "0.4rem 0.75rem", borderRadius: "9999px",
+                background: "transparent", marginLeft: "auto",
+                color: reportedIdx.has(recIdx) ? "var(--color-fun-orange)" : "rgba(0,0,0,0.4)",
+                border: "2px solid rgba(0,0,0,0.15)",
+                cursor: reportedIdx.has(recIdx) ? "default" : "pointer",
+                fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "0.72rem",
+                flexShrink: 0,
+              }}
+            >
+              <Flag size={12} fill={reportedIdx.has(recIdx) ? "currentColor" : "none"} />
+              Report
+            </button>
           </div>
           <p style={{
             fontFamily: "var(--font-body)",
@@ -2327,6 +2387,22 @@ function MagazineView({ result, currentMood, onSurpriseMe, onReturn, loading }) 
           }}
         >DONE FOR TODAY</motion.button>
       </div>
+
+      <AnimatePresence>
+        {reportOpenFor !== null && recs[reportOpenFor] && (
+          <ReportModal
+            payload={{
+              itemId:    recs[reportOpenFor].id || recs[reportOpenFor].title,
+              itemTitle: recs[reportOpenFor].title,
+              mechanism: recs[reportOpenFor].mechanism || (result.psychProfile && result.psychProfile.primary_mechanism),
+              moods:     (result.psychProfile && result.psychProfile.active_moods) || [],
+              sessionId: sessionIdRef.current,
+            }}
+            onSubmitted={() => setReportedIdx((prev) => new Set(prev).add(reportOpenFor))}
+            onClose={() => setReportOpenFor(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2410,9 +2486,10 @@ function CrisisPanel({ onContinue, onClose }) {
             border: "2px solid var(--color-fun-ink)",
             display: "flex", alignItems: "center", justifyContent: "center",
             background: "transparent", cursor: "pointer",
+            color: "var(--color-fun-ink)",
           }}
         >
-          <X size={20} />
+          <X size={20} color="var(--color-fun-ink)" />
         </button>
 
         <motion.div
@@ -2488,6 +2565,404 @@ function CrisisPanel({ onContinue, onClose }) {
             Continue gently anyway
           </button>
         </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ReportModal — report an inappropriate recommendation
+// ─────────────────────────────────────────────────────────────────
+const REPORT_REASONS = [
+  { id: "triggering", label: "Triggering or shocking content" },
+  { id: "mismatched", label: "Didn't match how I'm feeling" },
+  { id: "other",      label: "Other reason" },
+];
+
+function ReportModal({ payload, onClose, onSubmitted }) {
+  const [reasonId, setReasonId] = useState(null);
+  const [text, setText] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | sending | sent | error
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!payload) return null;
+
+  const submit = async () => {
+    if (!reasonId || status === "sending") return;
+    setStatus("sending");
+    try {
+      const res = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id:         payload.itemId,
+          item_title:      payload.itemTitle,
+          mechanism:       payload.mechanism,
+          moods:           payload.moods || [],
+          reason_category: reasonId,
+          reason_text:     text.trim(),
+          nonce:           payload.sessionId,
+        }),
+      });
+      if (!res.ok) throw new Error("bad status");
+      setStatus("sent");
+      if (onSubmitted) onSubmitted();
+    } catch (e) {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 80,
+        background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "1.5rem",
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, y: 20, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.92, y: 20, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        className="sticker-shadow"
+        style={{
+          background: "var(--color-fun-white)", color: "var(--color-fun-ink)",
+          maxWidth: "32rem", width: "100%",
+          borderRadius: "2.5rem", border: "4px solid var(--color-fun-ink)",
+          padding: "2.5rem", position: "relative",
+        }}
+      >
+        <button
+          onClick={onClose} aria-label="Close"
+          style={{
+            position: "absolute", top: "1.25rem", right: "1.25rem",
+            width: "2.5rem", height: "2.5rem", borderRadius: "9999px",
+            border: "3px solid var(--color-fun-ink)", background: "var(--color-fun-white)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            color: "var(--color-fun-ink)",
+          }}
+        ><X size={18} strokeWidth={3} color="var(--color-fun-ink)" /></button>
+
+        {status === "sent" ? (
+          <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
+            <Flag size={36} style={{ color: "var(--color-fun-orange)", marginBottom: "1rem" }} />
+            <p style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "1.3rem", margin: 0 }}>
+              Thanks for the report
+            </p>
+            <p style={{ fontFamily: "var(--font-body)", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+              We'll take a closer look.
+            </p>
+          </div>
+        ) : (
+          <>
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "1.4rem", margin: "0 0 0.4rem 0" }}>
+              Report this recommendation
+            </h3>
+            <p style={{ fontFamily: "var(--font-body)", color: "var(--text-muted)", margin: "0 0 1.5rem 0", fontSize: "0.9rem" }}>
+              {payload.itemTitle}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1.25rem" }}>
+              {REPORT_REASONS.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setReasonId(r.id)}
+                  style={{
+                    textAlign: "left", padding: "0.85rem 1.1rem",
+                    borderRadius: "1.25rem",
+                    border: reasonId === r.id ? "3px solid var(--color-fun-ink)" : "2px solid var(--border-subtle)",
+                    background: reasonId === r.id ? "var(--color-fun-yellow)" : "transparent",
+                    fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.95rem",
+                    cursor: "pointer", color: "var(--color-fun-ink)",
+                  }}
+                >{r.label}</button>
+              ))}
+            </div>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Anything you'd like to add? (optional)"
+              rows={3}
+              style={{
+                width: "100%", padding: "0.85rem 1rem", borderRadius: "1rem",
+                border: "2px solid var(--border-subtle)", fontFamily: "var(--font-body)",
+                fontSize: "0.9rem", resize: "vertical", marginBottom: "1.25rem",
+                boxSizing: "border-box",
+                background: "var(--color-fun-white)", color: "var(--color-fun-ink)",
+              }}
+            />
+            {status === "error" && (
+              <p style={{ color: "#c0392b", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+                The report couldn't be sent — please try again.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!reasonId || status === "sending"}
+              style={{
+                width: "100%", padding: "1rem", borderRadius: "9999px",
+                border: "3px solid var(--color-fun-ink)",
+                background: reasonId ? "var(--color-fun-ink)" : "var(--border-subtle)",
+                color: reasonId ? "var(--color-fun-white)" : "var(--text-muted)",
+                fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "0.95rem",
+                cursor: reasonId ? "pointer" : "not-allowed",
+              }}
+            >{status === "sending" ? "Sending..." : "Send report"}</button>
+          </>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// FeedbackModal — avis général sur l'usage de l'application
+// ─────────────────────────────────────────────────────────────────
+function FeedbackModal({ open, onClose, onSubmitted, lastMechanism, lastMoods, sessionId }) {
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [watchedStatus, setWatchedStatus] = useState(null); // "watched" | "planning" | "no"
+  const [helpedFeelBetter, setHelpedFeelBetter] = useState(null); // true | false
+  const [surprised, setSurprised] = useState(null); // true | false
+  const [wouldRecommend, setWouldRecommend] = useState(null); // true | false
+  const [whyNot, setWhyNot] = useState("");
+  const [comment, setComment] = useState("");
+  const [status, setStatus] = useState("idle");
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const hasAnyAnswer = !!(
+    rating || watchedStatus || surprised !== null || wouldRecommend !== null || comment.trim()
+  );
+
+  const submit = async () => {
+    if (!hasAnyAnswer || status === "sending") return;
+    setStatus("sending");
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rating:              rating || null,
+          watched_status:      watchedStatus,
+          helped_feel_better:  helpedFeelBetter,
+          surprised:           surprised,
+          would_recommend:     wouldRecommend,
+          why_not:             whyNot.trim(),
+          comment:             comment.trim(),
+          last_mechanism:      lastMechanism || null,
+          last_moods:          lastMoods || [],
+          nonce:               sessionId,
+        }),
+      });
+      if (!res.ok) throw new Error("bad status");
+      setStatus("sent");
+      if (onSubmitted) onSubmitted();
+    } catch (e) {
+      setStatus("error");
+    }
+  };
+
+  const resetAndClose = () => {
+    onClose();
+    setTimeout(() => {
+      setRating(0); setWatchedStatus(null); setHelpedFeelBetter(null);
+      setSurprised(null); setWouldRecommend(null); setWhyNot("");
+      setComment(""); setStatus("idle");
+    }, 300);
+  };
+
+  const pillStyle = (active) => ({
+    padding: "0.6rem 1rem", borderRadius: "9999px",
+    border: active ? "3px solid var(--color-fun-ink)" : "2px solid var(--border-subtle)",
+    background: active ? "var(--color-fun-yellow)" : "transparent",
+    fontFamily: "var(--font-body)", fontWeight: 600, fontSize: "0.88rem",
+    cursor: "pointer", color: "var(--color-fun-ink)", whiteSpace: "nowrap",
+  });
+
+  const Question = ({ label, children }) => (
+    <div style={{ marginBottom: "1.25rem" }}>
+      <p style={{ fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "0.9rem", margin: "0 0 0.5rem 0" }}>
+        {label}
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>{children}</div>
+    </div>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={resetAndClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 80,
+        background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "1.5rem", overflowY: "auto",
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, y: 20, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.92, y: 20, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        className="sticker-shadow"
+        style={{
+          background: "var(--color-fun-white)", color: "var(--color-fun-ink)",
+          maxWidth: "30rem", width: "100%",
+          borderRadius: "2.5rem", border: "4px solid var(--color-fun-ink)",
+          padding: "2.5rem", position: "relative",
+          maxHeight: "90vh", overflowY: "auto",
+        }}
+      >
+        <button
+          onClick={resetAndClose} aria-label="Close"
+          style={{
+            position: "absolute", top: "1.25rem", right: "1.25rem",
+            width: "2.5rem", height: "2.5rem", borderRadius: "9999px",
+            border: "3px solid var(--color-fun-ink)", background: "var(--color-fun-white)",
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            color: "var(--color-fun-ink)",
+          }}
+        ><X size={18} strokeWidth={3} color="var(--color-fun-ink)" /></button>
+
+        {status === "sent" ? (
+          <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
+            <Heart size={36} fill="currentColor" style={{ color: "var(--color-fun-pink)", marginBottom: "1rem" }} />
+            <p style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "1.3rem", margin: 0 }}>
+              Thank you!
+            </p>
+            <p style={{ fontFamily: "var(--font-body)", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+              Your feedback helps us make Ami better.
+            </p>
+          </div>
+        ) : (
+          <>
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "1.4rem", margin: "0 0 0.4rem 0" }}>
+              Your feedback on Ami
+            </h3>
+            <p style={{ fontFamily: "var(--font-body)", color: "var(--text-muted)", margin: "0 0 1.5rem 0", fontSize: "0.9rem" }}>
+              Tell us what's working, or what isn't.
+            </p>
+
+            <div style={{ display: "flex", gap: "0.4rem", justifyContent: "center", marginBottom: "1.5rem" }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n} type="button"
+                  onClick={() => setRating(n)}
+                  onMouseEnter={() => setHoverRating(n)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  aria-label={\`\${n} star\${n > 1 ? "s" : ""}\`}
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: "0.25rem" }}
+                >
+                  <Star
+                    size={30}
+                    fill={(hoverRating || rating) >= n ? "var(--color-fun-yellow)" : "none"}
+                    style={{ color: "var(--color-fun-ink)" }}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <Question label="Have you watched or read at least one recommendation?">
+              <button type="button" style={pillStyle(watchedStatus === "watched")}
+                onClick={() => setWatchedStatus("watched")}>Yes, already did</button>
+              <button type="button" style={pillStyle(watchedStatus === "planning")}
+                onClick={() => { setWatchedStatus("planning"); setHelpedFeelBetter(null); }}>Not yet, but I plan to</button>
+              <button type="button" style={pillStyle(watchedStatus === "no")}
+                onClick={() => { setWatchedStatus("no"); setHelpedFeelBetter(null); }}>No</button>
+            </Question>
+
+            {watchedStatus === "watched" && (
+              <Question label="Did it help you feel better?">
+                <button type="button" style={pillStyle(helpedFeelBetter === true)}
+                  onClick={() => setHelpedFeelBetter(true)}>Yes</button>
+                <button type="button" style={pillStyle(helpedFeelBetter === false)}
+                  onClick={() => setHelpedFeelBetter(false)}>No</button>
+              </Question>
+            )}
+
+            <Question label="Were any of the recommendations surprising?">
+              <button type="button" style={pillStyle(surprised === true)}
+                onClick={() => setSurprised(true)}>Yes</button>
+              <button type="button" style={pillStyle(surprised === false)}
+                onClick={() => setSurprised(false)}>No</button>
+            </Question>
+
+            <Question label="Would you recommend Ami to someone else?">
+              <button type="button" style={pillStyle(wouldRecommend === true)}
+                onClick={() => { setWouldRecommend(true); setWhyNot(""); }}>Yes</button>
+              <button type="button" style={pillStyle(wouldRecommend === false)}
+                onClick={() => setWouldRecommend(false)}>No</button>
+            </Question>
+
+            {wouldRecommend === false && (
+              <textarea
+                value={whyNot}
+                onChange={(e) => setWhyNot(e.target.value)}
+                placeholder="Mind telling us why not?"
+                rows={2}
+                style={{
+                  width: "100%", padding: "0.85rem 1rem", borderRadius: "1rem",
+                  border: "2px solid var(--border-subtle)", fontFamily: "var(--font-body)",
+                  fontSize: "0.9rem", resize: "vertical", marginBottom: "1.25rem",
+                  boxSizing: "border-box",
+                  background: "var(--color-fun-white)", color: "var(--color-fun-ink)",
+                }}
+              />
+            )}
+
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Anything else you'd like to share? (optional)"
+              rows={3}
+              style={{
+                width: "100%", padding: "0.85rem 1rem", borderRadius: "1rem",
+                border: "2px solid var(--border-subtle)", fontFamily: "var(--font-body)",
+                fontSize: "0.9rem", resize: "vertical", marginBottom: "1.25rem",
+                boxSizing: "border-box",
+                background: "var(--color-fun-white)", color: "var(--color-fun-ink)",
+              }}
+            />
+            {status === "error" && (
+              <p style={{ color: "#c0392b", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+                Couldn't send your feedback — please try again.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!hasAnyAnswer || status === "sending"}
+              style={{
+                width: "100%", padding: "1rem", borderRadius: "9999px",
+                border: "3px solid var(--color-fun-ink)",
+                background: hasAnyAnswer ? "var(--color-fun-ink)" : "var(--border-subtle)",
+                color: hasAnyAnswer ? "var(--color-fun-white)" : "var(--text-muted)",
+                fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "0.95rem",
+                cursor: hasAnyAnswer ? "pointer" : "not-allowed",
+              }}
+            >{status === "sending" ? "Sending..." : "Send feedback"}</button>
+          </>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -2942,6 +3417,8 @@ async function fetchRecommendations({
   const collectedItems = [];
   let crisis = false;
   let crisisPayload = null;
+  let blocked = false;
+  let blockedPayload = null;
   let donePayload = null;
   let serverError = null;
 
@@ -2956,6 +3433,11 @@ async function fetchRecommendations({
     } else if (eventName === "crisis") {
       crisis = true;
       crisisPayload = dataObj;
+    } else if (eventName === "blocked") {
+      // Distinct from "crisis": an inappropriate (non-distress) image.
+      // See the backend's Step 2b comment for why these are kept separate.
+      blocked = true;
+      blockedPayload = dataObj;
     } else if (eventName === "vision_insight") {
       if (onProgress) onProgress({ step: "vision_insight", insight: dataObj });
     } else if (eventName === "error") {
@@ -2998,11 +3480,27 @@ async function fetchRecommendations({
   if (crisis) {
     return {
       crisis:          true,
+      blocked:         false,
       thesis:          "",
       recommendations: [],
       thematicChart:   [],
       psychProfile:    null,
       safety:          (crisisPayload && crisisPayload.safety) || { level: "crisis" },
+      timings:         null,
+      warning:         null,
+    };
+  }
+  if (blocked) {
+    return {
+      crisis:          false,
+      blocked:         true,
+      blockedMessage:  (blockedPayload && blockedPayload.message) ||
+                        "This image isn't something we can build a recommendation around.",
+      thesis:          "",
+      recommendations: [],
+      thematicChart:   [],
+      psychProfile:    null,
+      safety:          null,
       timings:         null,
       warning:         null,
     };
@@ -3055,6 +3553,7 @@ async function fetchRecommendations({
 
   return {
     crisis:          false,
+    blocked:         false,
     thesis:          donePayload.thesis || "",
     recommendations,
     thematicChart: (donePayload.thematic_data || []).map((t) => ({ name: t.name, value: t.value })),
@@ -3612,6 +4111,27 @@ function MoodMaskGallery() {
   );
 }
 
+// Smooth-scrolls to an element with a custom (slower, eased) duration.
+// Native scrollIntoView({behavior:"smooth"}) doesn't allow controlling
+// duration/easing, and its default speed can feel abrupt for a deliberate
+// "reveal" transition like analysis → recommendations.
+function smoothScrollToElement(el, { duration = 1000, block = "start" } = {}) {
+  if (!el || typeof window === "undefined") return;
+  const startY = window.scrollY || window.pageYOffset;
+  const rect = el.getBoundingClientRect();
+  const targetY = block === "center"
+    ? startY + rect.top + rect.height / 2 - window.innerHeight / 2
+    : startY + rect.top;
+  const startTime = performance.now();
+  const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  function step(now) {
+    const progress = Math.min((now - startTime) / duration, 1);
+    window.scrollTo(0, startY + (targetY - startY) * easeInOutCubic(progress));
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 function Ami() {
   const [loading, setLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
@@ -3627,16 +4147,64 @@ function Ami() {
   const [pendingContinue, setPendingContinue] = useState(null);
   const [detailsPayload, setDetailsPayload] = useState(null);
   const [thesisOpen, setThesisOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [showIntroTip, setShowIntroTip] = useState(false);
   const [lastPayload, setLastPayload] = useState(null);
+  const appSessionIdRef = React.useRef(
+    (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random())
+  );
   const resultsRef = React.useRef(null);
   const visionInsightRef = React.useRef(null);
+
+  // Introduce the feedback/report buttons once, the first time someone gets
+  // results — then remember (localStorage) so it never shows again.
+  useEffect(() => {
+    if (!result) return;
+    try {
+      if (localStorage.getItem("ami_intro_tip_seen")) return;
+    } catch (e) { /* localStorage unavailable — just show it once this load */ }
+    const showTimer = setTimeout(() => setShowIntroTip(true), 600);
+    const hideTimer = setTimeout(() => {
+      setShowIntroTip(false);
+      try { localStorage.setItem("ami_intro_tip_seen", "1"); } catch (e) {}
+    }, 8000);
+    return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
+  }, [result]);
+
+  const dismissIntroTip = () => {
+    setShowIntroTip(false);
+    try { localStorage.setItem("ami_intro_tip_seen", "1"); } catch (e) {}
+  };
+
+  const feedbackTimerRef = React.useRef(null);
+
+  // Proactively ask for feedback once, a couple of minutes after someone has
+  // had time to look at their recommendations — but never if they already
+  // gave feedback on their own (see markFeedbackGiven, called from
+  // FeedbackModal's onSubmitted).
+  useEffect(() => {
+    if (!result) return;
+    try {
+      if (sessionStorage.getItem("ami_feedback_given") || sessionStorage.getItem("ami_feedback_prompted")) return;
+    } catch (e) { /* fall through and prompt anyway */ }
+    feedbackTimerRef.current = setTimeout(() => {
+      try { sessionStorage.setItem("ami_feedback_prompted", "1"); } catch (e) {}
+      setFeedbackOpen(true);
+    }, 90000);
+    return () => clearTimeout(feedbackTimerRef.current);
+  }, [result]);
+
+  const markFeedbackGiven = () => {
+    try { sessionStorage.setItem("ami_feedback_given", "1"); } catch (e) {}
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+  };
 
   useEffect(() => {
     if (!result) return;
     const t1 = requestAnimationFrame(() => {
       const t2 = setTimeout(() => {
         if (resultsRef.current) {
-          resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+          smoothScrollToElement(resultsRef.current, { duration: 1100, block: "start" });
         }
       }, 150);
       resultsRef._t = t2;
@@ -3652,7 +4220,7 @@ function Ami() {
     if (!visionInsight) return;
     const t = setTimeout(() => {
       if (visionInsightRef.current) {
-        visionInsightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        smoothScrollToElement(visionInsightRef.current, { duration: 900, block: "center" });
       }
     }, 300);
     return () => clearTimeout(t);
@@ -3716,6 +4284,16 @@ function Ami() {
       if (data.crisis && !bypassCrisis) {
         setCrisisOpen(true);
         setPendingContinue(payload);
+        setLoading(false);
+        return;
+      }
+      if (data.blocked) {
+        // Content-policy block, distinct from the crisis panel on purpose —
+        // this is not a wellbeing emergency, so we don't show crisis
+        // resources for it. Reusing the existing error banner for now;
+        // consider a dedicated, softer-worded panel if this needs to stand
+        // out more from a generic technical error.
+        setError(data.blockedMessage);
         setLoading(false);
         return;
       }
@@ -3798,6 +4376,65 @@ function Ami() {
             >
               {darkMode ? <Sun size={20} fill="currentColor" /> : <Moon size={20} fill="currentColor" />}
             </motion.button>
+
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <motion.button
+                onClick={() => { setFeedbackOpen(true); dismissIntroTip(); }}
+                aria-label="Give feedback on Ami"
+                title="Give feedback"
+                whileHover={{ scale: 1.1, rotate: -8, transition: { duration: 0.2 } }}
+                whileTap={{ scale: 0.92 }}
+                style={{
+                  padding: "0.5rem",
+                  borderRadius: "9999px",
+                  background: "transparent",
+                  border: "2px solid color-mix(in srgb, var(--color-fun-ink) 10%, transparent)",
+                  color: "var(--color-fun-ink)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", flexShrink: 0,
+                  transition: "background-color 0.2s ease",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--color-fun-ink) 5%, transparent)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              >
+                <MessageCircle size={20} />
+              </motion.button>
+
+              <AnimatePresence>
+                {showIntroTip && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: "absolute", top: "calc(100% + 0.75rem)", right: 0,
+                      width: "15rem", zIndex: 60,
+                      background: "var(--color-fun-ink)", color: "var(--color-fun-white)",
+                      borderRadius: "1.25rem", padding: "0.9rem 1.1rem",
+                      boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+                      fontFamily: "var(--font-body)", fontSize: "0.82rem", lineHeight: 1.4,
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute", top: "-0.4rem", right: "1.1rem",
+                      width: "0.8rem", height: "0.8rem",
+                      background: "var(--color-fun-ink)", transform: "rotate(45deg)",
+                    }} />
+                    <button
+                      onClick={dismissIntroTip}
+                      aria-label="Dismiss"
+                      style={{
+                        position: "absolute", top: "0.4rem", right: "0.5rem",
+                        background: "none", border: "none", color: "var(--color-fun-white)",
+                        opacity: 0.6, cursor: "pointer", padding: "0.2rem",
+                      }}
+                    ><X size={12} /></button>
+                    New: flag any recommendation that doesn't feel right (🚩 on each card), or tap here anytime to share feedback.
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             <motion.button
               onClick={() => setIsResearching(true)}
@@ -4569,6 +5206,19 @@ function Ami() {
             />
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {feedbackOpen && (
+            <FeedbackModal
+              open={feedbackOpen}
+              onClose={() => setFeedbackOpen(false)}
+              onSubmitted={markFeedbackGiven}
+              lastMechanism={result && result.psychProfile ? result.psychProfile.primary_mechanism : null}
+              lastMoods={result && result.psychProfile ? result.psychProfile.active_moods : []}
+              sessionId={appSessionIdRef.current}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
 
@@ -4585,7 +5235,7 @@ function Ami() {
       'Sparkles', 'Quote', 'Star', 'Loader2', 'Video', 'Tv', 'Book',
       'Heart', 'Phone', 'X', 'ArrowUpRight', 'Sun', 'Moon',
       'Mic', 'MicOff', 'ImagePlus',
-      'ChevronLeft', 'ChevronRight',
+      'ChevronLeft', 'ChevronRight', 'Flag', 'MessageCircle',
       'AreaChart', 'Area', 'ResponsiveContainer',
       'HTMLFlipBook',
       jsCode + '; return Ami;'
@@ -4597,7 +5247,7 @@ function Ami() {
       Sparkles, Quote, Star, Loader2, Video, Tv, Book,
       Heart, Phone, X, ArrowUpRight, Sun, Moon,
       Mic, MicOff, ImagePlus,
-      ChevronLeft, ChevronRight,
+      ChevronLeft, ChevronRight, Flag, MessageCircle,
       AreaChart, Area, ResponsiveContainer,
       HTMLFlipBook
     );
