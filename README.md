@@ -29,6 +29,7 @@ Deployed publicly on Hugging face since May 18 2026
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [API](#api)
+- [Feedback & Reporting](#feedback--reporting)
 - [Limitations and Next Steps](#limitations-and-next-steps)
 - [Credits](#credits)
 - [License](#license)
@@ -246,6 +247,8 @@ The notebook in [`/notebooks`](./notebooks) runs the entire pipeline : Psycholog
 | `/` | GET | Serves the frontend (`index.html`) |
 | `/api/health` | GET | Health check, returns the active model name |
 | `/api/recommend` | POST | Runs the Psychologist → filter → Librarian pipeline, streamed as **Server-Sent Events** |
+| `/api/report` | POST | Flags a specific recommendation (reason + optional note) |
+| `/api/feedback` | POST | Logs general app feedback (rating, a few quick questions, optional comment) |
 
 **Request body** for `/api/recommend` (JSON):
 
@@ -262,7 +265,11 @@ The notebook in [`/notebooks`](./notebooks) runs the entire pipeline : Psycholog
 
 At least one of `free_text`, `selected_moods`, or `image_b64` is required.
 
-**SSE event stream:** `status` → (`vision_insight`) → (`crisis`) → `item` × 4 → `done`, or `error` on failure.
+**SSE event stream:** `status` → (`vision_insight`) → (`crisis` | `blocked`) → `item` × 4 → `done`, or `error` on failure.
+
+## Feedback & Reporting
+
+Any recommendation can be flagged (🚩), and general app feedback is asked for after a bit of use. Both are persisted to a private Hugging Face Dataset via `CommitScheduler` — set `FEEDBACK_DATASET_REPO` and `HF_TOKEN` to enable (otherwise they only live in the Space's ephemeral storage).
 
 ## Limitations and Next Steps
 
@@ -286,4 +293,4 @@ This project is licensed under the [MIT License](LICENSE) - see the `LICENSE` fi
 
 ---
 
-*Don't miss your ticklish bubble burster.* 
+*Don't miss your ticklish bubble burster.*
