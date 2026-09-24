@@ -2,7 +2,7 @@
 
 **Recommendation based on preferences can trap us in our own biases (Nguyen et al., 2014). Recommendation based on research could liberate us. That is Ami's principle.**
 
-Ami recommends films, series, novels, and cultural anecdotes based on how you feel *right now* and on peer-reviewed psychological research, not on your watch history nor on a popularity algorithm.
+Ami recommends films, series, novels, and cultural anecdotes based on how you feel *right now* and on peer-reviewed psychological research.
 
 [![Watch the demo](https://img.shields.io/badge/YouTube-Watch%20the%20demo-red?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=VSvpd5PVpmU)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![See the Hugging Face space](https://img.shields.io/badge/-HuggingFace-3B4252?style=flat&logo=huggingface&logoColor=)](https://huggingface.co/spaces/aichakorovaev/ami-demo/tree/main).
